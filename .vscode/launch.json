@@ -1,0 +1,43 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "gdb",
+            "request": "attach",
+            "name": "Attach to gdbserver",
+            "target": "localhost:26000",
+            "remote": true,
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "valuesFormatting": "parseText",
+            //"gdbpath": "/usr/bin/gdb"
+            "gdbpath": "/home/vos/gdb_7.7/usr/bin/gdb"
+            //"debugger_args": [ "--command=${workspaceFolder}/.gdbinit" ]
+        },
+        {
+            "name": "(gdb) Attach test",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/obj/kern/kernel",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/home/vos/gdb_7.7/usr/bin/gdb",
+            "miDebuggerArgs": "--cd=${workspaceFolder} --nx --command=${workspaceFolder}/.gdbinit",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                },
+                { "text": "target remote localhost:26000" }
+            ]
+        }
+    ]
+}
