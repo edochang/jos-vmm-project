@@ -1,4 +1,4 @@
-#line 2 "./vmm/vmx.c"
+#line 2 "../vmm/vmx.c"
 
 #include <vmm/vmx.h>
 #include <vmm/vmx_asm.h>
@@ -62,9 +62,9 @@ bool vmx_check_support() {
 	uint32_t eax, ebx, ecx, edx;
 	cpuid( 0, &eax, &ebx, &ecx, &edx );
 	/* Your code here */
-    //panic("vmx_check_support not implemented\n");
+    panic("vmx_check_support not implemented\n");
 	cprintf("[VMM] VMX extension not supported.\n");
-	return true;
+	return false;
 }
 
 /* This function reads the VMX-specific MSRs
@@ -82,9 +82,9 @@ bool vmx_check_support() {
  */
 bool vmx_check_ept() {
 	/* Your code here */
-    //panic("vmx_check_ept not implemented\n");
+    panic("vmx_check_ept not implemented\n");
 	cprintf("[VMM] EPT extension not supported.\n");
-	return true;
+	return false;
 }
 
 /* Checks if curr_val is compatible with fixed0 and fixed1
