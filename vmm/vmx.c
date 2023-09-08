@@ -605,7 +605,7 @@ int vmx_vmrun( struct Env *e ) {
 
 	// Hint, Lab 0: The following if statement should be true when the environment has only run once.
 	// Replace the conditional to use your new variable!
-	if( curenv == NULL && curenv->env_runs == 1 ) {
+	if( e != NULL && e->env_runs == 1 ) {
 		physaddr_t vmcs_phy_addr = PADDR(e->env_vmxinfo.vmcs);
 
 		// Call VMCLEAR on the VMCS region.
