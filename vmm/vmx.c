@@ -62,7 +62,10 @@ bool vmx_check_support() {
 	uint32_t eax, ebx, ecx, edx;
 	cpuid( 0, &eax, &ebx, &ecx, &edx );
 	/* Your code here */
-    panic("vmx_check_support not implemented\n");
+	if (BIT(ecx, 5)){
+		return true;
+	}
+    // panic("vmx_check_support not implemented\n");
 	cprintf("[VMM] VMX extension not supported.\n");
 	return false;
 }
@@ -82,7 +85,13 @@ bool vmx_check_support() {
  */
 bool vmx_check_ept() {
 	/* Your code here */
-    panic("vmx_check_ept not implemented\n");
+	uint64_t msr;
+	msr = read_msr(IA32_VMX_PROCBASED_CTLS);
+	if (BIT(msr, 63)) {
+		msr = read_msr(IA32_VMX_PROCBASED_CTLS2);
+		if (BIT(msr, 33)) return true;
+	}
+    // panic("vmx_check_ept not implemented\n");
 	cprintf("[VMM] EPT extension not supported.\n");
 	return false;
 }
