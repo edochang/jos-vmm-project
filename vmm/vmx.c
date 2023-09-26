@@ -71,6 +71,7 @@ bool vmx_check_support() {
 		return true;
 	}
 	//panic("vmx_check_support not implemented\n");
+	cprintf("[VMM] VMX extension not supported.\n");
 	return false;
 }
 
@@ -90,21 +91,17 @@ bool vmx_check_support() {
 bool vmx_check_ept() {
 	/* Your code here */
 	uint64_t vmx_ctls = read_msr( IA32_VMX_PROCBASED_CTLS );
-	int activate_secondary_controls = BIT( vmx_ctls, 63 );
-
-	if ( activate_secondary_controls == 1 ) {
-		uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
-		int ept_bit = BIT( vmx_ctls2, 33 );
-
-		if ( ept_bit == 1 ) {
-			return true;
-		}
-	}
 	uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
-	int ept_bit = BIT( vmx_ctls2, 33 );
+	
+	// Add offset to get to the secondary control bit and ept bit
+	int activate_secondary_controls = BIT( vmx_ctls, (32 + 31) );
+	int ept_bit = BIT( vmx_ctls2, (32 + 1) );
 
+	if ( activate_secondary_controls == 1 && ept_bit == 1) {
+		return true;
+	}
     //panic("vmx_check_ept not implemented\n");
-	cprintf("Error: vmx_check_ept not implemented\n");
+	cprintf("[VMM] EPT extension not supported.\n");
 	return false;
 }
 

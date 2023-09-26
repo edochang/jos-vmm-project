@@ -46,6 +46,11 @@ sched_yield(void)
 	for (j = 1; j <= NENV; j++) {
 		k = (j + i) % NENV;
 		// If this environment is runnable, run it.
+		/*
+		if (envs[k].env_type == ENV_TYPE_GUEST) {
+			cprintf("Environment k-index(%d) CPUNUM (%d) ID (%d) Type (%d) State (%d) \n", k, envs[k].env_cpunum, envs[k].env_id, envs[k].env_type, envs[k].env_status );
+		}
+		*/
 		if (envs[k].env_status == ENV_RUNNABLE) {
             /* Your code here */
 			#ifndef VMM_GUEST
@@ -53,7 +58,8 @@ sched_yield(void)
 				cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges for Guest VM.");
 				int vmxon_result = vmxon();
 				if ( vmxon_result < 0 ) {
-					cprintf("Error: VMXON failed to start.  Guest environment will continue to run");
+					cprintf("[VMM] Error VMXON failed to start.  Halt the scheduler for the CPU");
+					sched_halt();
 				}
 			}
 			#endif
@@ -62,13 +68,15 @@ sched_yield(void)
 	}
 
 	if (curenv && curenv->env_status == ENV_RUNNING) {
-        /* Your code here */
+        //cprintf("Environment CPUNUM (%d) ID (%d) Type (%d) State (%d) \n", curenv->env_cpunum, curenv->env_id, curenv->env_type, curenv->env_status );
+		/* Your code here */
 		#ifndef VMM_GUEST
 		if ( curenv->env_type == ENV_TYPE_GUEST ) {
-			cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges for Guest VM.");
+			cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges to do VMX operations.");
 			int vmxon_result = vmxon();
 			if ( vmxon_result < 0 ) {
-				cprintf("Error: VMXON failed to start. Guest environment will continue to run.");
+				cprintf("Error: VMXON failed to start.  Halt the scheduler for the CPU");
+				sched_halt();
 			}
 		}
 		#endif
