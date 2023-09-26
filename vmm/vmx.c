@@ -62,8 +62,15 @@ bool vmx_check_support() {
 	uint32_t eax, ebx, ecx, edx;
 	cpuid( 0, &eax, &ebx, &ecx, &edx );
 	/* Your code here */
-    panic("vmx_check_support not implemented\n");
-	cprintf("[VMM] VMX extension not supported.\n");
+	// Use the cpuid() function and set eax = 1, to get the
+	// processor feature information 
+	cpuid( 1, &eax, &ebx, &ecx, &edx );
+
+	int vmx_bit = BIT( ecx, 5 );
+	if ( vmx_bit == 1 ) {
+		return true;
+	}
+	//panic("vmx_check_support not implemented\n");
 	return false;
 }
 
@@ -82,8 +89,22 @@ bool vmx_check_support() {
  */
 bool vmx_check_ept() {
 	/* Your code here */
-    panic("vmx_check_ept not implemented\n");
-	cprintf("[VMM] EPT extension not supported.\n");
+	uint64_t vmx_ctls = read_msr( IA32_VMX_PROCBASED_CTLS );
+	int activate_secondary_controls = BIT( vmx_ctls, 63 );
+
+	if ( activate_secondary_controls == 1 ) {
+		uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
+		int ept_bit = BIT( vmx_ctls2, 33 );
+
+		if ( ept_bit == 1 ) {
+			return true;
+		}
+	}
+	uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
+	int ept_bit = BIT( vmx_ctls2, 33 );
+
+    //panic("vmx_check_ept not implemented\n");
+	cprintf("Error: vmx_check_ept not implemented\n");
 	return false;
 }
 

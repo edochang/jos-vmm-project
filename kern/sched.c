@@ -48,12 +48,30 @@ sched_yield(void)
 		// If this environment is runnable, run it.
 		if (envs[k].env_status == ENV_RUNNABLE) {
             /* Your code here */
+			#ifndef VMM_GUEST
+			if ( envs[k].env_type == ENV_TYPE_GUEST ) {
+				cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges for Guest VM.");
+				int vmxon_result = vmxon();
+				if ( vmxon_result < 0 ) {
+					cprintf("Error: VMXON failed to start.  Guest environment will continue to run");
+				}
+			}
+			#endif
 			env_run(&envs[k]);
 		}
 	}
 
 	if (curenv && curenv->env_status == ENV_RUNNING) {
         /* Your code here */
+		#ifndef VMM_GUEST
+		if ( curenv->env_type == ENV_TYPE_GUEST ) {
+			cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges for Guest VM.");
+			int vmxon_result = vmxon();
+			if ( vmxon_result < 0 ) {
+				cprintf("Error: VMXON failed to start. Guest environment will continue to run.");
+			}
+		}
+		#endif
 		env_run(curenv);
 	}
 
