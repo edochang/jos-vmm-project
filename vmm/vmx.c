@@ -480,6 +480,9 @@ void asm_vmrun(struct Trapframe *tf) {
 	// of cr2 of the guest.
 
 	// Hint, Lab 0: tf_ds should have the number of runs, prior to entering the assembly!!
+	// e (the env we got the trapframe from) and curenv are the same at this point,
+	// because asm_vmrun is called after setting the curenv, so we can just 
+	// reference curenv to get the number of runs here.
 	tf->tf_ds = curenv->env_runs;
 	tf->tf_es = 0;
 	unlock_kernel();
