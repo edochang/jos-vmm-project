@@ -48,12 +48,20 @@ sched_yield(void)
 		// If this environment is runnable, run it.
 		if (envs[k].env_status == ENV_RUNNABLE) {
             /* Your code here */
+			if(envs[k].env_type == ENV_TYPE_GUEST){
+				int r;
+				r = vmxon();
+			}
 			env_run(&envs[k]);
 		}
 	}
 
 	if (curenv && curenv->env_status == ENV_RUNNING) {
         /* Your code here */
+		if(curenv->env_type == ENV_TYPE_GUEST){
+			int r;
+			r = vmxon();
+		}
 		env_run(curenv);
 	}
 
