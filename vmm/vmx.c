@@ -89,13 +89,22 @@ bool vmx_check_support() {
  */
 bool vmx_check_ept() {
 	/* Your code here */
-	uint64_t read_msr_result = read_msr( IA32_VMX_PROCBASED_CTLS2 );
-	int ept_bit = BIT( read_msr_result, 33 );
+	uint64_t vmx_ctls = read_msr( IA32_VMX_PROCBASED_CTLS );
+	int activate_secondary_controls = BIT( vmx_ctls, 63 );
 
-	if ( ept_bit == 1 ) {
-		return true;
+	if ( activate_secondary_controls == 1 ) {
+		uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
+		int ept_bit = BIT( vmx_ctls2, 33 );
+
+		if ( ept_bit == 1 ) {
+			return true;
+		}
 	}
+	uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
+	int ept_bit = BIT( vmx_ctls2, 33 );
+
     //panic("vmx_check_ept not implemented\n");
+	cprintf("Error: vmx_check_ept not implemented\n");
 	return false;
 }
 
