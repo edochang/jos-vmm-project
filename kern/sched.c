@@ -55,11 +55,12 @@ sched_yield(void)
             /* Your code here */
 			#ifndef VMM_GUEST
 			if ( envs[k].env_type == ENV_TYPE_GUEST ) {
-				cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges for Guest VM.");
+				cprintf("[VMM] DEBUG: I'm a VMM! Wanting to run VMX root privileges for Guest VM");
 				int vmxon_result = vmxon();
 				if ( vmxon_result < 0 ) {
-					cprintf("[VMM] Error VMXON failed to start.  Halt the scheduler for the CPU");
-					sched_halt();
+					cprintf("[VMM] Error VMXON failed to start");
+					cprintf("[VMM] Cleanup VM environment");
+					env_destroy(&envs[k]);
 				}
 			}
 			#endif
@@ -75,8 +76,9 @@ sched_yield(void)
 			cprintf("Debug: I'm a VMM! Wanting to run VMX root privileges to do VMX operations.");
 			int vmxon_result = vmxon();
 			if ( vmxon_result < 0 ) {
-				cprintf("Error: VMXON failed to start.  Halt the scheduler for the CPU");
-				sched_halt();
+				cprintf("Error: VMXON failed to start");
+				cprintf("[VMM] Cleanup VM environment");
+				env_destroy(&envs[k]);
 			}
 		}
 		#endif
