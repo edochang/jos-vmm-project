@@ -78,7 +78,7 @@ sched_yield(void)
 			if ( vmxon_result < 0 ) {
 				cprintf("Error: VMXON failed to start");
 				cprintf("[VMM] Cleanup VM environment");
-				env_destroy(&curenv);
+				env_destroy(curenv);
 			}
 		}
 		#endif
