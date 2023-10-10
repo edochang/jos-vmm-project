@@ -106,6 +106,7 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 	envid_t env_index = ENVX(envid);
 	e = &envs[env_index];
 	if (e->env_status == ENV_FREE || e->env_id != envid) {
+		//*env_store = 0;
 		*env_store = NULL;
 		return -E_BAD_ENV;
 	}
@@ -116,6 +117,7 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 	// must be either the current environment
 	// or an immediate child of the current environment.
 	if (checkperm && e != curenv && e->env_parent_id != curenv->env_id) {
+		//*env_store = 0;
 		*env_store = NULL;
 		return -E_BAD_ENV;
 	}
@@ -681,7 +683,7 @@ env_run(struct Env *e)
 		// Hint, Lab 0: An environment has started running. We should keep track of that somewhere, right?
 		//e->env_runs++; // increment the number of times the env has been run
 		e->env_runs = e->env_runs + 1;
-
+		
 		// restore e's address space
 		if(e->env_type != ENV_TYPE_GUEST)
 			lcr3(e->env_cr3);
