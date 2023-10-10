@@ -47,6 +47,7 @@ sched_yield(void)
 		k = (j + i) % NENV;
 		// If this environment is runnable, run it.
 		if (envs[k].env_status == ENV_RUNNABLE) {
+			/* Your code here */
 #ifndef VMM_GUEST
 			// only need to call vmxon() if the env to run is a guest
 			// this actually causes the autograder to fail on start vmxon,
@@ -58,9 +59,12 @@ sched_yield(void)
 				if (envs[k].env_vmxinfo.vcpunum != cpunum()) {
 					continue;
 				}
-				r = vmxon();
+				//cprintf("[VMM] DEBUG: I'm a VMM! Wanting to run VMX root privileges for Guest VM");
+				int vmxon_result = vmxon();
 				// vmxon can fail; if it does, destroy the env and try the next one
-				if (r < 0) {
+				if (vmxon_result < 0) {
+					//cprintf("[VMM] Error VMXON failed to start");
+					//cprintf("[VMM] Cleanup VM environment");
 					env_destroy(&envs[k]);
 					continue;
 				}
@@ -76,8 +80,10 @@ sched_yield(void)
 			if (curenv->env_vmxinfo.vcpunum != cpunum()) {
 				return;
 			}
-			r = vmxon();
-			if (r < 0) {
+			int vmxon_result = vmxon();
+			if (vmxon_result < 0) {
+				//cprintf("Error: VMXON failed to start");
+				//cprintf("[VMM] Cleanup VM environment");
 				env_destroy(curenv);
 			}
 		}

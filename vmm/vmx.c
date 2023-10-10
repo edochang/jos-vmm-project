@@ -60,6 +60,10 @@ bool vmx_sel_resume(int num) {
  */
 bool vmx_check_support() {
 	uint32_t eax, ebx, ecx, edx;
+	//cpuid( 0, &eax, &ebx, &ecx, &edx );
+	/* Your code here */
+	// Use the cpuid() function and set eax = 1, to get the
+	// processor feature information 
 	cpuid( 1, &eax, &ebx, &ecx, &edx );
 
 	/*
@@ -67,6 +71,7 @@ bool vmx_check_support() {
 	 * then VMX operation is supported." So if the 5th bit of the ecx variable
 	 * after executing cpuid() is a 1, then VMX is supported.
 	 */
+	/* TA Solution 
 	bool vmx_support = (bool)BIT(ecx, 5);
 	if (vmx_support) {
 		cprintf("Processor supports VMX\n");
@@ -74,6 +79,16 @@ bool vmx_check_support() {
 		cprintf("Processor does not support VMX\n");
 	}
 	return vmx_support;
+	*/
+	int vmx_bit = BIT( ecx, 5 );
+	if ( vmx_bit == 1 ) {
+		cprintf("Processor supports VMX\n");
+		return true;
+	}
+	//panic("vmx_check_support not implemented\n");
+	//cprintf("[VMM] VMX extension not supported.\n");
+	cprintf("Processor does not support VMX\n");
+	return false;
 }
 
 /* This function reads the VMX-specific MSRs
@@ -90,6 +105,8 @@ bool vmx_check_support() {
  *   EPT is available.
  */
 bool vmx_check_ept() {
+	/* Your code here */
+	/* TA Solution
 	uint64_t msr1, msr2;
 	bool secondary_vmx, ept_support;
 
@@ -107,6 +124,21 @@ bool vmx_check_ept() {
 			return true;
 		}
 	} 
+	return false;
+	*/
+	uint64_t vmx_ctls = read_msr( IA32_VMX_PROCBASED_CTLS );
+	uint64_t vmx_ctls2 = read_msr( IA32_VMX_PROCBASED_CTLS2 );
+	
+	// Add offset to get to the secondary control bit and ept bit
+	int activate_secondary_controls = BIT( vmx_ctls, (32 + 31) );
+	int ept_bit = BIT( vmx_ctls2, (32 + 1) );
+
+	if ( activate_secondary_controls == 1 && ept_bit == 1) {
+		cprintf("Processor supports EPT\n");
+		return true;
+	}
+    //panic("vmx_check_ept not implemented\n");
+	cprintf("[VMM] EPT extension not supported.\n");
 	return false;
 }
 
@@ -491,7 +523,9 @@ void asm_vmrun(struct Trapframe *tf) {
 	// of cr2 of the guest.
 
 	// Hint, Lab 0: tf_ds should have the number of runs, prior to entering the assembly!!
-	// e (the env we got the trapframe from) and curenv are the same at this point
+	// e (the env we got the trapframe from) and curenv are the same at this point,
+	// because asm_vmrun is called after setting the curenv, so we can just 
+	// reference curenv to get the number of runs here.
 	tf->tf_ds = curenv->env_runs;
 	tf->tf_es = 0;
 	unlock_kernel();
@@ -630,7 +664,7 @@ int vmx_vmrun( struct Env *e ) {
 	// Hint, Lab 0: The following if statement should be true when the environment has only run once.
 	// Replace the conditional to use your new variable!
 	// if( curenv == NULL) {
-	if (e->env_runs == 1) {
+	if( e != NULL && e->env_runs == 1 ) {
 		physaddr_t vmcs_phy_addr = PADDR(e->env_vmxinfo.vmcs);
 
 		// Call VMCLEAR on the VMCS region.
