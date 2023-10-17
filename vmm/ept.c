@@ -49,6 +49,20 @@ static inline int epte_present(epte_t epte)
 static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 			  int create, epte_t **epte_out) {
     /* Your code here */
+	if(!eptrt){
+		return -E_INVAL
+	}
+	pte_t *pte = pml4e_walk(eptrt, gpa, create)
+	
+	if(create == 0 && !pte){
+		return -E_NO_ENT
+	}
+	if(!pte){
+		return -E_NO_MEM
+	}
+	if(epte_out){
+		epte_out = *pte
+	}
     return 0;
 }
 
@@ -126,6 +140,12 @@ int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
 int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
         int overwrite) {
     /* Your code here */
+	epte_t **epte_out
+	int r = ept_lookup_gpa(eptrt, hva, 1, epte_out)
+	if(r<0){return r}
+	if(epte_out && !overwrite){
+		return -E_INVAL
+	}
     return 0;
 }
 
