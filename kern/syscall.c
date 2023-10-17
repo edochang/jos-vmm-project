@@ -454,6 +454,29 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	    envid_t guest, void* guest_pa, int perm)
 {
     /* Your code here */
+	int r;
+	struct Env *env_src, *env_guest;
+	struct PageInfo *pp;
+	pte_t *ppte;
+
+	if ((r = envid2env(srcenvid, &env_src, 1)) < 0
+            || (r = envid2env(guest, &env_guest, 1)) < 0)
+		return r;
+	if (srcva >= (void*) UTOP || srcva != ROUNDDOWN(srcva, PGSIZE))
+		return -E_INVAL;
+	if (guest_pa >= (void*) env_guest->env_vmxinfo.phys_sz
+	        || guest_pa != ROUNDDOWN(guest_pa, PGSIZE))
+		return -E_INVAL;
+	if ((pp = page_lookup(env_src->env_pml4e, srcva, &ppte)) == 0)
+		return -E_INVAL;
+	if ((~perm & (PTE_U|PTE_P)) || (perm & ~PTE_SYSCALL))
+		return -E_INVAL;
+	if ((perm & PTE_W) && !(*ppte & PTE_W))
+		return -E_INVAL;
+	void* hva = page2kva(pp);
+	// TODO(qing): should we overwrite it?
+	if ((r = ept_map_hva2gpa(env_guest->env_pml4e, hva, guest_pa, perm, 0)) < 0)
+		return r;
     return 0;
 }
 
