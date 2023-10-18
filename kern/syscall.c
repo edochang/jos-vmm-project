@@ -470,10 +470,10 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	int overwrite = 0;
 	/*  
 	Pointer variables that point to the array object that represents the environment store that is set by calling the evnid2env() function
-		Env *es: Pointer to the source Environment Store
-		Env *eg: Pointer to the guest Environment Store
+		Env *env_src: Pointer to the source Environment
+		Env *env_guest: Pointer to the guest Environment
 	*/
-	struct Env *es, *eg;
+	struct Env *env_src, *env_guest;
 	/*
 	Pointer variables to Page Information (p) and Page Table Entries (pte)
 		PageInfo *pp: Pointer to the page information data structure
@@ -481,14 +481,14 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	*/
 	struct PageInfo *pp;
 	pte_t *ppte;
-	epte_t *eptrt;
+	epte_t *guest_eptrt;
 
 	// Get the src Env and guest Env
-	if ((result = envid2env(srcenvid, &es, 1)) < 0 || (result = envid2env(guest, &eg, 1) < 0))
+	if ((result = envid2env(srcenvid, &env_src, 1)) < 0 || (result = envid2env(guest, &env_guest, 1) < 0))
 		// If < 0, return the error code from the function
 		return result;
-
-	eptrt = eg->env_pml4e;
+	// Store the pml4e
+	guest_eptrt = env_guest->env_pml4e;
 
 	// Check if the srcva is a page table located in the correct memory region (above UTOP in RO ENVs below UPAGES)
 	// -E_INVAL if srcva >= UTOP or guest_pa >= guest physical size or 
@@ -507,8 +507,10 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	if ((perm & PTE_W) && !(*ppte & PTE_W))
 		return -E_INVAL;
 	// -E_NO_MEM if there's no memory to allocate any necessary page tables.
-	// Note: This will be passed from ept_lookup_gpa()
-	if ((result = ept_map_hva2gpa(eptrt, srcva, guest_pa, perm, overwrite)) < 0){
+	// Note: -E_NO_MEM will be passed from ept_lookup_gpa()
+	// Pass the host virtual address pointing to the physical page (pp)
+	void* hva = page2kva(pp);
+	if ((result = ept_map_hva2gpa(guest_eptrt, hva, guest_pa, perm, overwrite)) < 0){
 		return result;
 	}
     return 0;
