@@ -454,6 +454,63 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	    envid_t guest, void* guest_pa, int perm)
 {
     /* Your code here */
+	/*
+	Args:
+		srcenvid (envid_t):  The environment id of the source - host vmm
+		srcva (void*):  The source page table's virtual address in 64 bit from UTEMP (Used for temporary page mappings.  Typed 'void*' for convenience)
+		guest (envid_t):  The guest environment id
+		guest_pa (void*):  The guest environment's page table's physical address in 64 bit from UTEMP (referenced from test_ept_map()) (Used for temporary page mappings.  Typed 'void*' for convenience)
+		perm (int):  The permission the Guest should have for the EPT passed in as an integer.  Can use bitwise operations to do logical bitwise comparison for the bit-by-bit permissions for EPTE (Notes: EPT tables to have write access - e.g., __EPTE_READ, perm & __EPTE_READ).
+	Returns:
+		(int):  Result of the operation using codes as defined in the comments above this function
+	*/
+	// Temporary variables to store the results calling other helper functions.
+	int result;
+	// Local variable to hold whether to overwrite EPTs or not
+	int overwrite = 0;
+	/*  
+	Pointer variables that point to the array object that represents the environment store that is set by calling the evnid2env() function
+		Env *es: Pointer to the source Environment Store
+		Env *eg: Pointer to the guest Environment Store
+	*/
+	struct Env *es, *eg;
+	/*
+	Pointer variables to Page Information (p) and Page Table Entries (pte)
+		PageInfo *pp: Pointer to the page information data structure
+		pte_t *ppte: Pointer to the PTE's address space
+	*/
+	struct PageInfo *pp;
+	pte_t *ppte;
+	epte_t *eptrt;
+
+	// Get the src Env and guest Env
+	if ((result = envid2env(srcenvid, &es, 1)) < 0 || (result = envid2env(guest, &eg, 1) < 0))
+		// If < 0, return the error code from the function
+		return result;
+
+	eptrt = eg->env_pml4e;
+
+	// Check if the srcva is a page table located in the correct memory region (above UTOP in RO ENVs below UPAGES)
+	// -E_INVAL if srcva >= UTOP or guest_pa >= guest physical size or 
+	if (srcva >= (void*) UTOP || guest_pa >= eg->env_vmxinfo.phys_sz)
+		return -E_INVAL;
+	// srcva is not page-aligned or guest_pa is not page-aligned.
+	if (srcva != ROUNDDOWN(srcva, PGSIZE) || guest_pa != ROUNDDOWN(guest_pa, PGSIZE))
+		return -E_INVAL;
+	// -E_INVAL is srcva is not mapped in srcenvid's address space.
+	if ((pp = page_lookup(es->env_pml4e, srcva, &ppte)) == 0)
+		return -E_INVAL;
+	// -E_INVAL if perm is inappropriate
+	if (perm == 0)
+		return -E_INVAL;
+	// -E_INVAL if (perm & PTE_W), but srcva is read-only in srcenvid's address space.
+	if ((perm & PTE_W) && !(*ppte & PTE_W))
+		return -E_INVAL;
+	// -E_NO_MEM if there's no memory to allocate any necessary page tables.
+	// Note: This will be passed from ept_lookup_gpa()
+	if ((result = ept_map_hva2gpa(eptrt, srcva, guest_pa, perm, overwrite)) < 0){
+		return result;
+	}
     return 0;
 }
 

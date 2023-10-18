@@ -49,6 +49,50 @@ static inline int epte_present(epte_t epte)
 static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 			  int create, epte_t **epte_out) {
     /* Your code here */
+	/*
+	Args:
+		eptrt (epte_t*): A pointer to ept root represented as an extended page table entry type
+		gpa (void*): A guest physical address in 64 bit
+		create (int): Create any missing intermedate extended page tables if create is != 0
+		epte_out (epte_t): A pointer to a pointer that points to the final ept entry outputing the host physical address
+	Returns:
+		result (int): 0 on success otherwise use an error value as defined in the comment above that is < 0
+	*/
+
+	// You don't need ept_page_insert . Instead, you should try taking a look at page_alloc and page2pa
+	// https://edstem.org/us/courses/42546/discussion/3620085
+	
+	// Set the type to EPTE_TYPE_WB and set __EPTE_IPAT flag.
+
+	// -E_INVAL if eptrt is NULL
+	if (eptrt == NULL)
+		return -E_INVAL;
+
+	// Walk the 4-Level Page Table Hierarchy
+	epte_t *dir = eptrt;
+	for (int i = EPT_LEVELS - 1; i >= 0; --i ) {
+        int idx = ADDR_TO_IDX(UTEMP, i);
+		if (!epte_present(dir[idx]) && create) {
+			// If PDPTE, PDE, or PTE is missing, create page
+			//epte_t *next_entry = (epte_t *)entry[PML4(gpa)];
+			struct PageInfo *page = NULL;
+			if ((page = page_alloc(ALLOC_ZERO))) {
+				page->pp_ref += 1;
+				dir[idx] = page2pa(page)|__EPTE_READ;
+			} else {
+				// -E_NO_MEM if allocation of intermediate page table entries fails
+				return -E_NO_MEM;
+			}
+		} else {
+			// -E_NO_ENT if create == 0 and the intermediate page table entries are missing.
+			return -E_NO_ENT;
+		}
+		if (i == 0) {
+			*epte_out = dir[idx];
+		} else {
+			dir = (epte_t *) epte_page_vaddr(dir[idx]);
+		}
+	}
     return 0;
 }
 
@@ -126,6 +170,32 @@ int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
 int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
         int overwrite) {
     /* Your code here */
+	/*
+	Args:
+		eptrt (epte_t*): A pointer to ept root represented as an extended page table entry type
+		hva (void*): A host virtual address in 64 bit
+		gpa (void*): A guest physical address in 64 bit
+		perm (int): 
+		overwrite (int): 
+	Returns:
+		(int): 0 on success otherwise use an error value as defined in the comment above that is < 0
+	*/
+	// Temporary variables to store the results calling other helper functions.
+	int result;
+	// Local variables;
+	epte_t *epte_out;
+
+	// Lookup the gpa
+	if ((result = ept_lookup_gpa(eptrt, gpa, 0, &epte_out) < 0)) {
+		return result;
+	}
+	// If the mapping already exists and overwrite is set to 0, return -E_INVAL.
+	if (epte_out != NULL && overwrite == 0)
+		return -E_INVAL;
+	// If the mapping already exists, then overwrite
+	if (epte_out != NULL && overwrite > 0)
+		// How to set HVA to GP?
+
     return 0;
 }
 
