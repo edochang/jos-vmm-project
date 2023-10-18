@@ -71,14 +71,14 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 	// Walk the 4-Level Page Table Hierarchy
 	epte_t *dir = eptrt;
 	for (int i = EPT_LEVELS - 1; i >= 0; --i ) {
-        int idx = ADDR_TO_IDX(UTEMP, i);
+        int idx = ADDR_TO_IDX(gpa, i);
 		if (!epte_present(dir[idx]) && create) {
 			// If PDPTE, PDE, or PTE is missing, create page
 			//epte_t *next_entry = (epte_t *)entry[PML4(gpa)];
 			struct PageInfo *page = NULL;
 			if ((page = page_alloc(ALLOC_ZERO))) {
 				page->pp_ref += 1;
-				dir[idx] = page2pa(page)|__EPTE_READ;
+				dir[idx] = page2pa(page)|__EPTE_FULL;
 			} else {
 				// -E_NO_MEM if allocation of intermediate page table entries fails
 				return -E_NO_MEM;
@@ -182,19 +182,27 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 	*/
 	// Temporary variables to store the results calling other helper functions.
 	int result;
-	// Local variables;
+	// Local variables
+	int idx;
 	epte_t *epte_out;
 
 	// Lookup the gpa
-	if ((result = ept_lookup_gpa(eptrt, gpa, 0, &epte_out) < 0)) {
+	if ((result = ept_lookup_gpa(eptrt, gpa, 1, &epte_out) < 0))
 		return result;
+
+	if (overwrite == 0) {
+		// If the mapping already exists and overwrite is set to 0, return -E_INVAL.
+		if (epte_present(*epte_out)) {
+			return -E_INVAL;
+		} else {
+			// Map hva's physical page to gpa at the lowest page table entry
+			*epte_out = pp2page(PADDR(hva));
+		}
 	}
-	// If the mapping already exists and overwrite is set to 0, return -E_INVAL.
-	if (epte_out != NULL && overwrite == 0)
-		return -E_INVAL;
+	
 	// If the mapping already exists, then overwrite
-	if (epte_out != NULL && overwrite > 0)
-		// How to set HVA to GP?
+	if (overwrite > 0 && epte_present(*epte_out))
+		*epte_out = pp2page(PADDR(hva));
 
     return 0;
 }
@@ -351,10 +359,10 @@ int test_ept_map(void)
         	if (!epte_present(dir[idx])) {
         		panic("Failed to find page table item at the immediate level %d.", i);
         	}
-		if (!(dir[idx] & __EPTE_FULL)) {
-			panic("Permission check failed at immediate level %d.", i);
-		}
-		dir = (epte_t *) epte_page_vaddr(dir[idx]);
+			if (!(dir[idx] & __EPTE_FULL)) {
+				panic("Permission check failed at immediate level %d.", i);
+			}
+			dir = (epte_t *) epte_page_vaddr(dir[idx]);
         }
 	cprintf("EPT immediate mapping check passed\n");
 
