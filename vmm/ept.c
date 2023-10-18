@@ -68,10 +68,9 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 	// Walk the 4-Level Page Table Hierarchy with a linear address
 	epte_t *dir = eptrt;
 	for (i = EPT_LEVELS - 1; i >= 0; --i ) {
-        int idx = ADDR_TO_IDX(gpa, i);
+        int idx = ADDR_TO_IDX(gpa, i);  // 3 - EPML4; 2 - EPDPT; 1- EPD; 0 - EPT
 		if (!epte_present(dir[idx]) && create) {
-			// If PDPTE, PDE, or PTE is missing, create page
-			//epte_t *next_entry = (epte_t *)entry[PML4(gpa)];
+			// If EPDPTE, EPDE, or EPTE is missing, create page
 			struct PageInfo *page = NULL;
 			if ((page = page_alloc(ALLOC_ZERO))) {
 				page->pp_ref += 1;
@@ -82,10 +81,12 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 				// -E_NO_MEM if allocation of intermediate page table entries fails
 				return -E_NO_MEM;
 			}
-		} else {
+		}
+
+		if (!epte_present(dir[idx]) && create == 0)
 			// -E_NO_ENT if create == 0 and the intermediate page table entries are missing.
 			return -E_NO_ENT;
-		}
+
 		if (i == 0) {
 			*epte_out = (epte_t *) epte_page_vaddr(dir[idx]);
 		} else {
@@ -194,14 +195,15 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 		if (epte_present(*epte_out)) {
 			return -E_INVAL;
 		} else {
-			// Map hva's physical page to gpa at the lowest page table entry
-			epte_out[idx] = PADDR(hva);
+			// Map hva's physical page to gpa at the lowest page table entry, set EPT permissions
+			epte_out[idx] = PADDR(hva)|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_FULL;
 		}
 	}
 	
 	// If the mapping already exists, then overwrite
+	// TODO(ed): Should we free the page?
 	if (overwrite > 0 && epte_present(*epte_out))
-		epte_out[idx] = PADDR(hva);
+		epte_out[idx] = PADDR(hva)|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_FULL;
 
     return 0;
 }
