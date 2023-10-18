@@ -492,13 +492,13 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 
 	// Check if the srcva is a page table located in the correct memory region (above UTOP in RO ENVs below UPAGES)
 	// -E_INVAL if srcva >= UTOP or guest_pa >= guest physical size or 
-	if (srcva >= (void*) UTOP || guest_pa >= eg->env_vmxinfo.phys_sz)
+	if (srcva >= (void*) UTOP || guest_pa >= env_guest->env_vmxinfo.phys_sz)
 		return -E_INVAL;
 	// srcva is not page-aligned or guest_pa is not page-aligned.
 	if (srcva != ROUNDDOWN(srcva, PGSIZE) || guest_pa != ROUNDDOWN(guest_pa, PGSIZE))
 		return -E_INVAL;
 	// -E_INVAL is srcva is not mapped in srcenvid's address space.
-	if ((pp = page_lookup(es->env_pml4e, srcva, &ppte)) == 0)
+	if ((pp = page_lookup(env_src->env_pml4e, srcva, &ppte)) == 0)
 		return -E_INVAL;
 	// -E_INVAL if perm is inappropriate
 	if (perm == 0)
