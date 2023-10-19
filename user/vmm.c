@@ -20,7 +20,23 @@ static int
 map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz, 
 	      int fd, size_t filesz, off_t fileoffset ) {
 	/* Your code here */
-	return -E_NO_SYS;
+	/*
+	map_in_guest() breaks down each segment in number of pages, and calls sys_ept_map() for each page. You cannot pass in the page directly, but rather will have to use a TEMP variable. This is defined as a macro in memlayout.h
+
+	Args:
+		guest (envid_t):  The guest environment id
+		gpa (uintptr_t):  A guest physical address in 64 bit
+		memsz (size_t):  Memory size of the region to map in guest.  Can span multple pages.
+		fd (int):  Region of file to be mapped into the guest
+		filesz (size_t):  file size length used on the file offset
+		fileoffset (off_t):  The starting offset for mapping a file region
+	Returns:
+		(int):  Result of the operation using codes as defined in the comments above this function
+	*/
+
+	// Call sys_ept_map() for mapping page.
+	return 0;
+	// return -E_NO_SYS;
 } 
 
 // Read the ELF headers of kernel file specified by fname,
@@ -32,7 +48,24 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 static int
 copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	/* Your code here */
-	return -E_NO_SYS;
+	/*
+	copy_guest_kern_gpa() reads the ELF header from the kernel executable into the struct Elf. The kernel ELF contains multiple segments which must be copied from the host to the guest. This function is similar to the one observed in the prelab but has to call something other than memcpy() to map the memory because we are in the virtual guest.
+	
+	Args:
+		guest (envid_t):  The guest environment id
+		fname (char*):  fname specifies the ELF files to be read and added to Guest physical memory
+	Returns:
+		(int):  Result of the operation using codes as defined in the comments above this function
+	*/
+	// From user/vmm.c calls this function and passes GUEST_KERN as fname
+	// #define GUEST_KERN "/vmm/kernel", so we are reading from disk in our project directory
+	// Local Variables
+	struct Env *env_guest;
+
+	// use readn()
+
+	return 0;
+	// return -E_NO_SYS;
 }
 
 void

@@ -455,6 +455,8 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 {
     /* Your code here */
 	/*
+	sys_ept_map() first walks the page table levels at the host (given the srcva), and then gets the physical page corresponding to the virtual address srcva (i.e. it returns the struct PageInfo). The corresponding virtual address of this page is then computed using page2kva(), which basically acts as the hva in the call to ept_map_hva2gpa().
+
 	Args:
 		srcenvid (envid_t):  The environment id of the source - host vmm
 		srcva (void*):  The source page table's virtual address in 64 bit from UTEMP (Used for temporary page mappings.  Typed 'void*' for convenience)
