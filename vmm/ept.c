@@ -50,6 +50,8 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 			  int create, epte_t **epte_out) {
     /* Your code here */
 	/*
+	ept_lookup_gpa() does the walk on the page table hierarchy at the guest and returns the page table entry corresponding to a gpa. It calculates the next index using the address and iterates until it reaches the page table entry at level 0 which points to the actual page.
+
 	Args:
 		eptrt (epte_t*): A pointer to ept root represented as an extended page table entry type
 		gpa (void*): A guest physical address in 64 bit
@@ -171,12 +173,14 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
         int overwrite) {
     /* Your code here */
 	/*
+	ept_map_hva2gpa() does a walk on the page table levels at the guest (given the gpa) using ept_lookup_gpa() and then gets a page table entry at level 0 corresponding to the gpa. This function then inserts the physical address corresponding to the hva, in the page table entry returned by ept_lookup_gpa().
+
 	Args:
-		eptrt (epte_t*): A pointer to ept root represented as an extended page table entry type
-		hva (void*): A host virtual address in 64 bit
-		gpa (void*): A guest physical address in 64 bit
-		perm (int): 
-		overwrite (int): 
+		eptrt (epte_t*):  A pointer to ept root represented as an extended page table entry type
+		hva (void*):  A host virtual address in 64 bit
+		gpa (void*):  A guest physical address in 64 bit
+		perm (int):  Defines the permission
+		overwrite (int):  Overwrite the mapping to an existing EPTE with the corresponding hva.
 	Returns:
 		(int): 0 on success otherwise use an error value as defined in the comment above that is < 0
 	*/
@@ -202,6 +206,7 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 	
 	// If the mapping already exists, then overwrite
 	// TODO(ed): Should we free the page?
+	// TODO(ed): Need to use the perm argument.  Do we check perm or do we set permission with perm?
 	if (overwrite > 0 && epte_present(*epte_out))
 		epte_out[idx] = PADDR(hva)|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_FULL;
 
