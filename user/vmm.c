@@ -60,9 +60,75 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	// From user/vmm.c calls this function and passes GUEST_KERN as fname
 	// #define GUEST_KERN "/vmm/kernel", so we are reading from disk in our project directory
 	// Local Variables
-	struct Env *env_guest;
+	int result, fd;
+	struct Elf *elf;
+	struct Proghdr *ph, *eph;
+	unsigned char elf_buf[512];
 
-	// use readn()
+	// Read the ELF files from disk from our project directory ./vmm/guest
+	if ((result = open(fname, O_RDONLY)) < 0)
+		return result;
+	fd = result;
+
+	// Read elf header
+	elf = (struct Elf*) elf_buf;
+	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
+            || elf->e_magic != ELF_MAGIC) {
+		close(fd);
+		cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
+		return -E_NOT_EXEC;
+	}
+
+	// Set up program segments as defined in ELF header.
+	//lcr3(PADDR((uint64_t)e->env_pml4e)); // TODO: Is this needed?
+	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+	for(;ph < eph; ph++) {
+		if (ph->p_type == ELF_PROG_LOAD) {
+			// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			//region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+			// TODO: Replace memcpy, with map_in_guest
+			//memcpy((void *)ph->p_va, (void *)((uint8_t *)elf + ph->p_offset), ph->p_filesz);
+			//map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz, int fd, size_t filesz, off_t fileoffset )
+			/*if ((result = map_in_guest(guest, gpa, ph->p_memsz, fd, filesize, fileoffset) < 0)
+				return -E_FAULT;
+			*/
+			if (ph->p_filesz < ph->p_memsz) {
+				memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz-ph->p_filesz);
+			}
+		}
+	}
+	// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+	//region_alloc(e, (void*) (USTACKTOP - PGSIZE), PGSIZE);
+	// TODO: Env / e is not accessable in user program.
+	//e->env_tf.tf_rip    = elf->e_entry;
+	//e->env_tf.tf_rsp    = USTACKTOP; //keeping stack 8 byte aligned
+
+	uintptr_t debug_address = USTABDATA;
+	struct Secthdr *sh = (struct Secthdr *)(((uint8_t *)elf + elf->e_shoff));
+	struct Secthdr *shstr_tab = sh + elf->e_shstrndx;
+	struct Secthdr* esh = sh + elf->e_shnum;
+	for(;sh < esh; sh++) {
+		char* name = (char*)((uint8_t*)elf + shstr_tab->sh_offset) + sh->sh_name;
+		if(!strcmp(name, ".debug_info") || !strcmp(name, ".debug_abbrev")
+			|| !strcmp(name, ".debug_line") || !strcmp(name, ".eh_frame")
+			|| !strcmp(name, ".debug_str")) {
+			// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			//region_alloc(e ,(void*)debug_address, sh->sh_size);
+			// TODO: Replace memcpy, with map_in_guest
+			//memcpy((void *)debug_address, (void *)((uint8_t *)elf + sh->sh_offset),
+			//		sh->sh_size);
+			debug_address += sh->sh_size;
+		}
+	}
+	lcr3(boot_cr3);
+
+	// TODO: Is this needed?
+	// Give environment a stack
+	// e->elf = binary;  
+
+	close(fd);
+	fd = -1;
 
 	return 0;
 	// return -E_NO_SYS;
