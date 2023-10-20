@@ -200,7 +200,8 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 			return -E_INVAL;
 		} else {
 			// If the mapping already exists, then overwrite it and decrement the old page reference count
-			pa2page(epte_addr(*epte_out))->pp_ref -= 1;
+			//pa2page(epte_addr(*epte_out))->pp_ref -= 1;
+			page_decref(pa2page(epte_addr(*epte_out)));  // Inspiration from free_ept_level()
 			hpa = PADDR(hva); 
 			// Increment the reference count since 2 page table entries reference to it.
 			pa2page(hpa)->pp_ref += 1;

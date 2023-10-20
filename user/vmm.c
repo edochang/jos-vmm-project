@@ -32,10 +32,23 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 		fileoffset (off_t):  The starting offset for mapping a file region
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
+
+	Note: Reading and loading is part of map_in_guest function.
+	In map in guest you take FD, readn(), allocate a page, then get to the right location of the descriptor to read this data, then set the mapping and do it for every size of the FD.  Get the right file-offset.  Do page size read, set the mappings, continue on until you finish doing it for all the memsizes.  Don't do all the reads in copy_guest_kern.
+	There are library calls that will help you create a page of memory in the guest environment to find and use.  don't use malloc because it'll be on host.  want to be more specific.
 	*/
 	// Local Variables
+	int result;
 
-	// Call sys_ept_map() for mapping page.
+	// TODO7: Need to loop
+
+	// Allocate the single stack page at UTEMP.
+	//if ((result = sys_page_alloc(guest, segments va, PTE_P|PTE_U|PTE_W)) < 0)  // this might needs to be moved in copy function.
+	//	return result;
+	// read from file from the offset.
+	if ((result = sys_ept_map(sys_getenvid(), (void *) UTEMP, guest, (void *) gpa, __EPTE_READ)) < 0 )
+		return result;
+	
 	return 0;
 	// return -E_NO_SYS;
 } 
@@ -57,6 +70,11 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		fname (char*):  fname specifies the ELF files to be read and added to Guest physical memory
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
+
+	copy_guest_kern does the following:
+		// - How can i parse the elf header
+		// - how can i traverse all the segments 
+		// - how i can call map_in_guest for each of these segments
 	*/
 	// From user/vmm.c calls this function and passes GUEST_KERN as fname
 	// #define GUEST_KERN "/vmm/kernel", so we are reading from disk in our project directory
@@ -86,21 +104,12 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	eph = ph + elf->e_phnum;
 	for(;ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.  Maybe do a sys_page_alloc instead?
 			//region_alloc(e, (void *)ph->p_va, ph->p_memsz);
 			// TODO7: Replace memcpy, with map_in_guest
-			// Note: Reading and loading is part of map_in_guest function.  
-			// copy_guest_kern does the following:
-			// - How can i parse the elf header
-			// - how can i traverse all the segments 
-			// - how i can call map_in_guest for each of these segments
-			// In map in guest you take FD, readn(), allocate a page, then get to the right location of the descriptor to read this data, then set the mapping and do it for every size of the FD.  Get the right file-offset.  Do page size read, set the mappings, continue on until you finish doing it for all the memsizes.  Don't do all the reads in copy_guest_kern.
-			// There are library calls that will help you create a page of memory in the guest environment to find and use.  don't use malloc because it'll be on host.  want to be more specific.
-			//memcpy((void *)ph->p_va, (void *)((uint8_t *)elf + ph->p_offset), ph->p_filesz);
-			//map_in_guest( guest, UTEXT, size_t memsz, fd, size_t filesz, off_t fileoffset )
-			/*if ((result = map_in_guest(guest, gpa, ph->p_memsz, fd, filesize, fileoffset) < 0)
+			if ((result = map_in_guest(guest, (uintptr_t) UTEMP, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0)
 				return -E_FAULT;
-			*/
+			// TODO7: Do we need to mem set?
 			if (ph->p_filesz < ph->p_memsz) {
 				memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz-ph->p_filesz);
 			}
@@ -121,11 +130,10 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		if(!strcmp(name, ".debug_info") || !strcmp(name, ".debug_abbrev")
 			|| !strcmp(name, ".debug_line") || !strcmp(name, ".eh_frame")
 			|| !strcmp(name, ".debug_str")) {
-			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.  Maybe do a sys_page_alloc instead?
 			//region_alloc(e ,(void*)debug_address, sh->sh_size);
-			// TODO7: Replace memcpy, with map_in_guest
-			//memcpy((void *)debug_address, (void *)((uint8_t *)elf + sh->sh_offset),
-			//		sh->sh_size);
+			if ((result = map_in_guest(guest, (uintptr_t) USTABDATA, 0, fd, sh->sh_size, sh->sh_offset)) < 0)
+				return -E_FAULT;
 			debug_address += sh->sh_size;
 		}
 	}
