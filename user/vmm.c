@@ -33,6 +33,7 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
 	*/
+	// Local Variables
 
 	// Call sys_ept_map() for mapping page.
 	return 0;
@@ -80,16 +81,23 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	}
 
 	// Set up program segments as defined in ELF header.
-	//lcr3(PADDR((uint64_t)e->env_pml4e)); // TODO: Is this needed?
+	//lcr3(PADDR((uint64_t)e->env_pml4e)); // TODO7: Is this needed?
 	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
 	eph = ph + elf->e_phnum;
 	for(;ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
 			//region_alloc(e, (void *)ph->p_va, ph->p_memsz);
-			// TODO: Replace memcpy, with map_in_guest
+			// TODO7: Replace memcpy, with map_in_guest
+			// Note: Reading and loading is part of map_in_guest function.  
+			// copy_guest_kern does the following:
+			// - How can i parse the elf header
+			// - how can i traverse all the segments 
+			// - how i can call map_in_guest for each of these segments
+			// In map in guest you take FD, readn(), allocate a page, then get to the right location of the descriptor to read this data, then set the mapping and do it for every size of the FD.  Get the right file-offset.  Do page size read, set the mappings, continue on until you finish doing it for all the memsizes.  Don't do all the reads in copy_guest_kern.
+			// There are library calls that will help you create a page of memory in the guest environment to find and use.  don't use malloc because it'll be on host.  want to be more specific.
 			//memcpy((void *)ph->p_va, (void *)((uint8_t *)elf + ph->p_offset), ph->p_filesz);
-			//map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz, int fd, size_t filesz, off_t fileoffset )
+			//map_in_guest( guest, UTEXT, size_t memsz, fd, size_t filesz, off_t fileoffset )
 			/*if ((result = map_in_guest(guest, gpa, ph->p_memsz, fd, filesize, fileoffset) < 0)
 				return -E_FAULT;
 			*/
@@ -98,9 +106,9 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 			}
 		}
 	}
-	// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+	// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
 	//region_alloc(e, (void*) (USTACKTOP - PGSIZE), PGSIZE);
-	// TODO: Env / e is not accessable in user program.
+	// TODO7: Env / e is not accessable in user program.
 	//e->env_tf.tf_rip    = elf->e_entry;
 	//e->env_tf.tf_rsp    = USTACKTOP; //keeping stack 8 byte aligned
 
@@ -113,17 +121,18 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		if(!strcmp(name, ".debug_info") || !strcmp(name, ".debug_abbrev")
 			|| !strcmp(name, ".debug_line") || !strcmp(name, ".eh_frame")
 			|| !strcmp(name, ".debug_str")) {
-			// TODO: Do we need to do a region_alloc()?  We have no access to Env in user program.
+			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
 			//region_alloc(e ,(void*)debug_address, sh->sh_size);
-			// TODO: Replace memcpy, with map_in_guest
+			// TODO7: Replace memcpy, with map_in_guest
 			//memcpy((void *)debug_address, (void *)((uint8_t *)elf + sh->sh_offset),
 			//		sh->sh_size);
 			debug_address += sh->sh_size;
 		}
 	}
-	lcr3(boot_cr3);
+	// TODO7: Is this needed?
+	//lcr3(boot_cr3);
 
-	// TODO: Is this needed?
+	// TODO7: Is this needed?
 	// Give environment a stack
 	// e->elf = binary;  
 

@@ -513,7 +513,7 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	// Note: -E_NO_MEM will be passed from ept_lookup_gpa()
 	// Pass the host virtual address pointing to the physical page (pp)
 	void* hva = page2kva(pp);
-	// TODO(qing): should we overwrite it?
+	// TODO7: should we overwrite it?
 	if ((result = ept_map_hva2gpa(guest_eptrt, hva, guest_pa, perm, overwrite)) < 0){
 		return result;
 	}
