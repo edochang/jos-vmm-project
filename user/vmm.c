@@ -23,6 +23,16 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	/*
 	map_in_guest() breaks down each segment in number of pages, and calls sys_ept_map() for each page. You cannot pass in the page directly, but rather will have to use a TEMP variable. This is defined as a macro in memlayout.h
 
+	Note: Reading and loading is part of map_in_guest function.
+	In map in guest you take 
+		- FD, readn(), allocate a page, then get to the right location of the descriptor to read this data.
+		- Then set the mapping and do it for every size of the FD.  
+		- Get the right file-offset.  
+		- Do page size read.
+		- Set the mappings
+		- continue on until you finish doing it for all the memsizes.  
+	Don't do all the reads in copy_guest_kern.  There are library calls that will help you create a page of memory in the guest environment to find and use.  Don't use malloc because it'll be on host.  Want to be more specific to where you allocate memory.
+
 	Args:
 		guest (envid_t):  The guest environment id
 		gpa (uintptr_t):  A guest physical address in 64 bit
@@ -32,23 +42,44 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 		fileoffset (off_t):  The starting offset for mapping a file region
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
-
-	Note: Reading and loading is part of map_in_guest function.
-	In map in guest you take FD, readn(), allocate a page, then get to the right location of the descriptor to read this data, then set the mapping and do it for every size of the FD.  Get the right file-offset.  Do page size read, set the mappings, continue on until you finish doing it for all the memsizes.  Don't do all the reads in copy_guest_kern.
-	There are library calls that will help you create a page of memory in the guest environment to find and use.  don't use malloc because it'll be on host.  want to be more specific.
 	*/
 	// Local Variables
 	int result;
+	int i;
+	void *blk;
 
-	// TODO7: Need to loop
+	//cprintf("map_segment %x+%x\n", va, memsz);
 
-	// Allocate the single stack page at UTEMP.
-	//if ((result = sys_page_alloc(guest, segments va, PTE_P|PTE_U|PTE_W)) < 0)  // this might needs to be moved in copy function.
-	//	return result;
+	if ((i = PGOFF(gpa))) {
+		gpa -= i;
+		memsz += i;
+		filesz += i;
+		fileoffset -= i;
+	}
+
 	// read from file from the offset.
 	if ((result = sys_ept_map(sys_getenvid(), (void *) UTEMP, guest, (void *) gpa, __EPTE_READ)) < 0 )
 		return result;
 	
+	for (i = 0; i < memsz; i += PGSIZE) {
+		if (i >= filesz) {
+			// allocate a blank page
+			if ((result = sys_page_alloc(guest, (void*) (gpa + i), PTE_P|PTE_U)) < 0)
+				return result;
+		} else {
+			// from file
+			if ((result = sys_page_alloc(sys_getenvid(), UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
+				return result;
+			if ((result = seek(fd, fileoffset + i)) < 0)
+				return result;
+			if ((result = readn(fd, UTEMP, MIN(PGSIZE, filesz-i))) < 0)
+				return result;
+			if ((result = sys_ept_map(sys_getenvid(), (void *) UTEMP, guest, (void *) gpa, __EPTE_READ)) < 0 )
+				return result;
+			sys_page_unmap(sys_getenvid(), UTEMP);
+		}
+	}
+
 	return 0;
 	// return -E_NO_SYS;
 } 
@@ -166,7 +197,7 @@ umain(int argc, char **argv) {
 
 	// Copy the guest kernel code into guest phys mem.
 	if((ret = copy_guest_kern_gpa(guest, GUEST_KERN)) < 0) {
-		cprintf("Error copying page into the guest - %d\n.", ret);
+		cprintf("Error copying page into the guest - %d\n.", ret);  // failed
 		exit();
 	}
 
