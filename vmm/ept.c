@@ -195,24 +195,26 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 	if ((result = ept_lookup_gpa(eptrt, gpa, 1, &epte_out) < 0))
 		return result;
 
-	if (overwrite == 0) {
-		// If the mapping already exists and overwrite is set to 0, return -E_INVAL.
-		if (epte_present(*epte_out)) {
+	if (epte_present(*epte_out)) {
+		if (overwrite == 0) {
 			return -E_INVAL;
 		} else {
-			// Map hva's physical page to gpa at the lowest page table entry, set EPT permissions
-			epte_out[idx] = PADDR(hva)|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_FULL;
+			// If the mapping already exists, then overwrite it and decrement the old page reference count
+			pa2page(epte_addr(*epte_out))->pp_ref -= 1;
+			hpa = PADDR(hva); 
+			// Increment the reference count since 2 page table entries reference to it.
+			pa2page(hpa)->pp_ref += 1;
+			// Based on the test_ept_map(), the perm sets the PTE-4KB Page
+			epte_out[idx] = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
 		}
-	}
-	
-	// If the mapping already exists, then overwrite
-	// TODO7: Should we free the page when overwriting?
-	// TODO7: Need to use the perm argument.  Do we check perm or do we set permission with perm?
-	if (overwrite > 0 && epte_present(*epte_out))
+	} else {
+		// Map hva's physical page to gpa at the lowest page table entry, set EPT permissions
 		hpa = PADDR(hva); 
 		// Increment the reference count since 2 page table entries reference to it.
 		pa2page(hpa)->pp_ref += 1;
-		epte_out[idx] = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_READ;
+		// Based on the test_ept_map(), the perm sets the PTE-4KB Page
+		epte_out[idx] = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
+	}
 		
     return 0;
 }
