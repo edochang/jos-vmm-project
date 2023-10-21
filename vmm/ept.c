@@ -61,7 +61,7 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 		result (int): 0 on success otherwise use an error value as defined in the comment above that is < 0
 	*/
 	// Local Variables
-	int i;
+	int i, j;
 
 	// -E_INVAL if eptrt is NULL
 	if (eptrt == NULL)
@@ -81,6 +81,12 @@ static int ept_lookup_gpa(epte_t* eptrt, void *gpa,
 				dir[idx] = page2pa(page)|__EPTE_TYPE(6)|__EPTE_IPAT|__EPTE_FULL;
 			} else {
 				// -E_NO_MEM if allocation of intermediate page table entries fails
+				// free the intermediate page table entries.
+				for (j = i; j < EPT_LEVELS; ++j) {
+					int idx_free = ADDR_TO_IDX(gpa, j);	
+					dir[idx_free] = 0;
+					page_decref(page);
+				}
 				return -E_NO_MEM;
 			}
 		}

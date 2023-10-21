@@ -501,8 +501,10 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	if (srcva != ROUNDDOWN(srcva, PGSIZE) || guest_pa != ROUNDDOWN(guest_pa, PGSIZE))
 		return -E_INVAL;
 	// -E_INVAL is srcva is not mapped in srcenvid's address space.
-	if ((pp = page_lookup(env_src->env_pml4e, srcva, &ppte)) == 0)
+	if ((pp = page_lookup(env_src->env_pml4e, srcva, &ppte)) == 0) {
+		//cprintf("DEBUG: page_lookup() failed\n");  // debug
 		return -E_INVAL;
+	}
 	// -E_INVAL if perm is inappropriate
 	if (perm == 0)
 		return -E_INVAL;

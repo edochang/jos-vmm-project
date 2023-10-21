@@ -122,6 +122,8 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		return -E_NOT_EXEC;
 	}
 
+	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup program segments for Guest Kernel\n");  // debug
+
 	// Set up program segments as defined in ELF header.
 	//lcr3(PADDR((uint64_t)e->env_pml4e)); // TODO7: Is this needed?
 	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
@@ -139,6 +141,9 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	//e->env_tf.tf_rip    = elf->e_entry;
 	//e->env_tf.tf_rsp    = USTACKTOP; //keeping stack 8 byte aligned
 
+	/* STAB segments are optional.
+	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup STAB segments for Guest Kernel\n");  // debug
+
 	uintptr_t debug_address = USTABDATA;
 	struct Secthdr *sh = (struct Secthdr *)(((uint8_t *)elf + elf->e_shoff));
 	struct Secthdr *shstr_tab = sh + elf->e_shstrndx;
@@ -153,6 +158,10 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 			debug_address += sh->sh_size;
 		}
 	}
+	*/
+	
+	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Completed segment processing\n");  // debug
+
 	// TODO7: Is this needed?
 	//lcr3(boot_cr3);
 
@@ -180,12 +189,14 @@ umain(int argc, char **argv) {
 	}
 	guest = ret;
 
+	cprintf("[VMM] DEBUG: copy_guest_kern_gpa()\n");  // debug
 	// Copy the guest kernel code into guest phys mem.
 	if((ret = copy_guest_kern_gpa(guest, GUEST_KERN)) < 0) {
 		cprintf("Error copying page into the guest - %d\n.", ret);  // failed
 		exit();
 	}
 
+	cprintf("[VMM] DEBUG: Open bootloader()\n");  // debug
 	// Now copy the bootloader.
 	int fd;
 	if ((fd = open( GUEST_BOOT, O_RDONLY)) < 0 ) {
@@ -193,6 +204,7 @@ umain(int argc, char **argv) {
 		exit();
 	}
 
+	cprintf("[VMM] DEBUG: map_in_guest() the bootloader\n");  // debug
 	// sizeof(bootloader) < 512.
 	if ((ret = map_in_guest(guest, JOS_ENTRY, 512, fd, 512, 0)) < 0) {
 		cprintf("Error mapping bootloader into the guest - %d\n.", ret);
