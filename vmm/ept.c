@@ -187,13 +187,15 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 	// Temporary variables to store the results calling other helper functions.
 	int result;
 	// Local variables
-	int idx = ADDR_TO_IDX(gpa, 0);
 	epte_t *epte_out;
 	physaddr_t hpa;
 
 	// Lookup the gpa
 	if ((result = ept_lookup_gpa(eptrt, gpa, 1, &epte_out) < 0))
 		return result;
+
+	// get the physical address
+	hpa = PADDR(hva); 
 
 	if (epte_present(*epte_out)) {
 		if (overwrite == 0) {
@@ -202,19 +204,18 @@ int ept_map_hva2gpa(epte_t* eptrt, void* hva, void* gpa, int perm,
 			// If the mapping already exists, then overwrite it and decrement the old page reference count
 			//pa2page(epte_addr(*epte_out))->pp_ref -= 1;
 			page_decref(pa2page(epte_addr(*epte_out)));  // Inspiration from free_ept_level()
-			hpa = PADDR(hva); 
 			// Increment the reference count since 2 page table entries reference to it.
 			pa2page(hpa)->pp_ref += 1;
 			// Based on the test_ept_map(), the perm sets the PTE-4KB Page
-			epte_out[idx] = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
+			*epte_out = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
+			tlb_invalidate(eptrt, gpa);
 		}
 	} else {
 		// Map hva's physical page to gpa at the lowest page table entry, set EPT permissions
-		hpa = PADDR(hva); 
 		// Increment the reference count since 2 page table entries reference to it.
 		pa2page(hpa)->pp_ref += 1;
 		// Based on the test_ept_map(), the perm sets the PTE-4KB Page
-		epte_out[idx] = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
+		*epte_out = hpa|__EPTE_TYPE(6)|__EPTE_IPAT|perm;
 	}
 		
     return 0;
