@@ -48,6 +48,7 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	int result;
 	int i;
 
+	// TODO7: Potential concern that gpa is not page-size aligned.  See if we need to do anything additional here.
 	// Adjust gpa to align with PGSIZE.
 	if ((i = PGOFF(gpa))) {
 		gpa -= i;
@@ -105,6 +106,8 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	struct Proghdr *ph, *eph;
 	unsigned char elf_buf[512];
 
+	//cprintf("map_segment %x+%x\n", va, memsz);
+
 	// Read the ELF files from disk from our project directory ./vmm/guest
 	if ((result = open(fname, O_RDONLY)) < 0)
 		return result;
@@ -125,15 +128,9 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	eph = ph + elf->e_phnum;
 	for(;ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.  Maybe do a sys_page_alloc instead?
-			//region_alloc(e, (void *)ph->p_va, ph->p_memsz);
 			// TODO7: Replace memcpy, with map_in_guest
-			if ((result = map_in_guest(guest, (uintptr_t) UTEMP, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0)
+			if ((result = map_in_guest(guest, (uintptr_t) ph->p_pa, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0)
 				return -E_FAULT;
-			// TODO7: Do we need to mem set?
-			if (ph->p_filesz < ph->p_memsz) {
-				memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz-ph->p_filesz);
-			}
 		}
 	}
 	// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
@@ -151,8 +148,6 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		if(!strcmp(name, ".debug_info") || !strcmp(name, ".debug_abbrev")
 			|| !strcmp(name, ".debug_line") || !strcmp(name, ".eh_frame")
 			|| !strcmp(name, ".debug_str")) {
-			// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.  Maybe do a sys_page_alloc instead?
-			//region_alloc(e ,(void*)debug_address, sh->sh_size);
 			if ((result = map_in_guest(guest, (uintptr_t) USTABDATA, 0, fd, sh->sh_size, sh->sh_offset)) < 0)
 				return -E_FAULT;
 			debug_address += sh->sh_size;
