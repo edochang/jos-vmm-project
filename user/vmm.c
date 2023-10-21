@@ -43,41 +43,31 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
 	*/
-	// Local Variables
+	// TODO7: set perm
+	int perm = PTE_SYSCALL;
 	int result;
 	int i;
-	void *blk;
 
-	//cprintf("map_segment %x+%x\n", va, memsz);
-
+	// Adjust gpa to align with PGSIZE.
 	if ((i = PGOFF(gpa))) {
 		gpa -= i;
 		memsz += i;
 		filesz += i;
 		fileoffset -= i;
 	}
-
-	// read from file from the offset.
-	if ((result = sys_ept_map(sys_getenvid(), (void *) UTEMP, guest, (void *) gpa, __EPTE_READ)) < 0 )
-		return result;
 	
 	for (i = 0; i < memsz; i += PGSIZE) {
-		if (i >= filesz) {
-			// allocate a blank page
-			if ((result = sys_page_alloc(guest, (void*) (gpa + i), PTE_P|PTE_U)) < 0)
-				return result;
-		} else {
-			// from file
-			if ((result = sys_page_alloc(sys_getenvid(), UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
-				return result;
+		if ((result = sys_page_alloc(0, UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
+			return result;
+		if (i < filesz) {
 			if ((result = seek(fd, fileoffset + i)) < 0)
 				return result;
 			if ((result = readn(fd, UTEMP, MIN(PGSIZE, filesz-i))) < 0)
 				return result;
-			if ((result = sys_ept_map(sys_getenvid(), (void *) UTEMP, guest, (void *) gpa, __EPTE_READ)) < 0 )
-				return result;
-			sys_page_unmap(sys_getenvid(), UTEMP);
 		}
+		if ((result = sys_ept_map(0, UTEMP, guest, (void*)gpa + i, perm)) < 0)
+			return result;
+		sys_page_unmap(0, UTEMP);
 	}
 
 	return 0;
