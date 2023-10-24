@@ -43,8 +43,7 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
 	*/
-	// TODO7: set perm
-	int perm = PTE_SYSCALL;
+	int perm = PTE_P|PTE_U|PTE_W;
 	int result;
 	int i;
 
@@ -72,7 +71,6 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	}
 
 	return 0;
-	// return -E_NO_SYS;
 } 
 
 // Read the ELF headers of kernel file specified by fname,
@@ -125,22 +123,14 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup program segments for Guest Kernel\n");  // debug
 
 	// Set up program segments as defined in ELF header.
-	//lcr3(PADDR((uint64_t)e->env_pml4e)); // TODO7: Is this needed?
 	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
 	eph = ph + elf->e_phnum;
 	for(;ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			// TODO7: Replace memcpy, with map_in_guest
 			if ((result = map_in_guest(guest, (uintptr_t) ph->p_pa, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0)
 				return -E_FAULT;
 		}
 	}
-	// TODO7: Do we need to do a region_alloc()?  We have no access to Env in user program.
-	//region_alloc(e, (void*) (USTACKTOP - PGSIZE), PGSIZE);
-	// TODO7: Env / e is not accessable in user program.
-	//e->env_tf.tf_rip    = elf->e_entry;
-	//e->env_tf.tf_rsp    = USTACKTOP; //keeping stack 8 byte aligned
-
 	/* STAB segments are optional.
 	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup STAB segments for Guest Kernel\n");  // debug
 
@@ -161,13 +151,6 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	*/
 	
 	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Completed segment processing\n");  // debug
-
-	// TODO7: Is this needed?
-	//lcr3(boot_cr3);
-
-	// TODO7: Is this needed?
-	// Give environment a stack
-	// e->elf = binary;  
 
 	close(fd);
 	fd = -1;
