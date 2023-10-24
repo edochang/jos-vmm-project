@@ -43,11 +43,10 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
 	*/
-	int perm = PTE_P|PTE_U|PTE_W;
+	int perm = __EPTE_FULL;
 	int result;
 	int i;
 
-	// TODO7: Potential concern that gpa is not page-size aligned.  See if we need to do anything additional here.
 	// Adjust gpa to align with PGSIZE.
 	if ((i = PGOFF(gpa))) {
 		gpa -= i;
@@ -96,8 +95,7 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		// - how can i traverse all the segments 
 		// - how i can call map_in_guest for each of these segments
 	*/
-	// From user/vmm.c calls this function and passes GUEST_KERN as fname
-	// #define GUEST_KERN "/vmm/kernel", so we are reading from disk in our project directory
+
 	// Local Variables
 	int result, fd;
 	struct Elf *elf;
@@ -120,7 +118,7 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		return -E_NOT_EXEC;
 	}
 
-	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup program segments for Guest Kernel\n");  // debug
+	//cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup program segments for Guest Kernel\n");  // debug
 
 	// Set up program segments as defined in ELF header.
 	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
@@ -143,14 +141,14 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 		if(!strcmp(name, ".debug_info") || !strcmp(name, ".debug_abbrev")
 			|| !strcmp(name, ".debug_line") || !strcmp(name, ".eh_frame")
 			|| !strcmp(name, ".debug_str")) {
-			if ((result = map_in_guest(guest, (uintptr_t) USTABDATA, 0, fd, sh->sh_size, sh->sh_offset)) < 0)
+			if ((result = map_in_guest(guest, (uintptr_t) USTABDATA, sh->sh_addr, fd, sh->sh_size, sh->sh_offset)) < 0)
 				return -E_FAULT;
 			debug_address += sh->sh_size;
 		}
 	}
 	*/
 	
-	cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Completed segment processing\n");  // debug
+	//cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Completed segment processing\n");  // debug
 
 	close(fd);
 	fd = -1;
@@ -172,14 +170,14 @@ umain(int argc, char **argv) {
 	}
 	guest = ret;
 
-	cprintf("[VMM] DEBUG: copy_guest_kern_gpa()\n");  // debug
+	//cprintf("[VMM] DEBUG: copy_guest_kern_gpa()\n");  // debug
 	// Copy the guest kernel code into guest phys mem.
 	if((ret = copy_guest_kern_gpa(guest, GUEST_KERN)) < 0) {
-		cprintf("Error copying page into the guest - %d\n.", ret);  // failed
+		cprintf("Error copying page into the guest - %d\n.", ret);
 		exit();
 	}
 
-	cprintf("[VMM] DEBUG: Open bootloader()\n");  // debug
+	//cprintf("[VMM] DEBUG: Open bootloader()\n");  // debug
 	// Now copy the bootloader.
 	int fd;
 	if ((fd = open( GUEST_BOOT, O_RDONLY)) < 0 ) {
@@ -187,7 +185,7 @@ umain(int argc, char **argv) {
 		exit();
 	}
 
-	cprintf("[VMM] DEBUG: map_in_guest() the bootloader\n");  // debug
+	//cprintf("[VMM] DEBUG: map_in_guest() the bootloader\n");  // debug
 	// sizeof(bootloader) < 512.
 	if ((ret = map_in_guest(guest, JOS_ENTRY, 512, fd, 512, 0)) < 0) {
 		cprintf("Error mapping bootloader into the guest - %d\n.", ret);
