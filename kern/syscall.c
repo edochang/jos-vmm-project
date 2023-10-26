@@ -466,10 +466,9 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	Returns:
 		(int):  Result of the operation using codes as defined in the comments above this function
 	*/
-	// Temporary variables to store the results calling other helper functions.
+	// Local variables
 	int result;
-	// Local variable to hold whether to overwrite EPTs or not
-	int overwrite = 0;
+	int overwrite = 0;  // defines whether to overwrite EPTs or not
 	/*  
 	Pointer variables that point to the array object that represents the environment store that is set by calling the evnid2env() function
 		Env *env_src: Pointer to the source Environment
@@ -485,13 +484,24 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	pte_t *ppte;
 	epte_t *guest_eptrt;
 
-	// Get the src Env and guest Env
+	// check that the source virtual address is good
+	if (srcva >= (void*) UTOP || srcva != ROUNDDOWN(srcva, PGSIZE)) {
+        return -E_INVAL;
+    }
+
+	// Get the src Env and guest Env.  If < 0, return the error code from the function
+	// obtain src and guest env, returning error if either does not exist
 	if ((result = envid2env(srcenvid, &env_src, 1)) < 0 || (result = envid2env(guest, &env_guest, 1) < 0))
-		// If < 0, return the error code from the function
 		return result;
 	// Store the pml4e
 	guest_eptrt = env_guest->env_pml4e;
-
+ 
+	// check that the guest physical address is good
+    if (guest_pa >= (void*) env_guest->env_vmxinfo.phys_sz || guest_pa != ROUNDDOWN(guest_pa, PGSIZE)) {
+        return -E_INVAL;
+    }
+	
+	/*
 	// Check if the srcva is a page table located in the correct memory region (above UTOP in RO ENVs below UPAGES)
 	// -E_INVAL if srcva >= UTOP or guest_pa >= guest physical size
 	// Note: GUEST_MEM_SZ 16 * 1024 * 1024
@@ -500,20 +510,26 @@ sys_ept_map(envid_t srcenvid, void *srcva,
 	// srcva is not page-aligned or guest_pa is not page-aligned.
 	if (srcva != ROUNDDOWN(srcva, PGSIZE) || guest_pa != ROUNDDOWN(guest_pa, PGSIZE))
 		return -E_INVAL;
+	*/
+
 	// -E_INVAL is srcva is not mapped in srcenvid's address space.
 	if ((pp = page_lookup(env_src->env_pml4e, srcva, &ppte)) == 0) {
 		//cprintf("DEBUG: page_lookup() failed\n");  // debug
 		return -E_INVAL;
 	}
+
 	// -E_INVAL if perm is inappropriate
-	if (perm == 0)
+	// check that the requested permissions are valid (some combination of read, write, and exec)
+	if ((perm & __EPTE_FULL) == 0)
 		return -E_INVAL;
 	// -E_INVAL if (perm & PTE_W), but srcva is read-only in srcenvid's address space.
-	if ((perm & PTE_W) && !(*ppte & PTE_W))
+	// if perm requests write permission but we don't have write access to the page, return an error
+	if ((perm & __EPTE_WRITE) && ((*ppte) & PTE_W) == 0)
 		return -E_INVAL;
 	// -E_NO_MEM if there's no memory to allocate any necessary page tables.
 	// Note: -E_NO_MEM will be passed from ept_lookup_gpa()
 	// Pass the host virtual address pointing to the physical page (pp)
+
 	void* hva = page2kva(pp);
 	if ((result = ept_map_hva2gpa(guest_eptrt, hva, guest_pa, perm, overwrite)) < 0){
 		return result;

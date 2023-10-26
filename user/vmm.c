@@ -55,17 +55,29 @@ map_in_guest( envid_t guest, uintptr_t gpa, size_t memsz,
 		fileoffset -= i;
 	}
 	
+	// walk through the provided region page by page and copy in the file contents
+	// the the physical memory region of the guest
 	for (i = 0; i < memsz; i += PGSIZE) {
-		if ((result = sys_page_alloc(0, UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
+		// allocate a temporary page
+		if ((result = sys_page_alloc(0, UTEMP, PTE_P|PTE_U|PTE_W)) < 0) {
+			sys_page_unmap(0, UTEMP);
 			return result;
-		if (i < filesz) {
-			if ((result = seek(fd, fileoffset + i)) < 0)
-				return result;
-			if ((result = readn(fd, UTEMP, MIN(PGSIZE, filesz-i))) < 0)
-				return result;
 		}
-		if ((result = sys_ept_map(0, UTEMP, guest, (void*)gpa + i, perm)) < 0)
+		// seek to the location to write the file contents at
+		if ((result = seek(fd, fileoffset + i)) < 0) {
+			sys_page_unmap(0, UTEMP);
 			return result;
+		}
+		// read file contents into the mapped page
+		if ((result = readn(fd, UTEMP, MIN(PGSIZE, filesz-i))) < 0) {
+			sys_page_unmap(0, UTEMP);
+			return result;
+		}
+		// map the page in the EPT
+		if ((result = sys_ept_map(0, UTEMP, guest, (void*) (gpa + i), perm)) < 0) {
+			sys_page_unmap(0, UTEMP);
+			return result;
+		}
 		sys_page_unmap(0, UTEMP);
 	}
 
@@ -100,19 +112,31 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	int result, fd;
 	struct Elf *elf;
 	struct Proghdr *ph, *eph;
-	unsigned char elf_buf[512];
+	int buflen = 512;
+	unsigned char elf_buf[buflen];  // large enough to fit the whole Elf struct
 
 	//cprintf("map_segment %x+%x\n", va, memsz);
 
+	// open the specified file
 	// Read the ELF files from disk from our project directory ./vmm/guest
-	if ((result = open(fname, O_RDONLY)) < 0)
-		return result;
-	fd = result;
+	if ((fd = open(fname, O_RDONLY)) < 0) {
+		cprintf("error opening %s: %e\n", fname, fd);
+		return fd;
+	}
+
+	// read in the header of file fname
+	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)) {
+		close(fd);
+		cprintf("Failed to read in ELF header\n");
+		return -E_NOT_EXEC;
+	}
 
 	// Read elf header
+	// point the elf struct at the elf buf
 	elf = (struct Elf*) elf_buf;
-	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
-            || elf->e_magic != ELF_MAGIC) {
+
+	// check the ELF header's magic value to check that we are working with a valid ELF binary
+	if (elf->e_magic != ELF_MAGIC) {
 		close(fd);
 		cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
 		return -E_NOT_EXEC;
@@ -121,12 +145,17 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	//cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Setup program segments for Guest Kernel\n");  // debug
 
 	// Set up program segments as defined in ELF header.
+	// point the program header struct at the location indicated by the elf header
 	ph = (struct Proghdr*) (elf_buf + elf->e_phoff);
+
+	// for every entry in the program header table, map the corresponding entry of the file 
+	// into the guest's physical address space
 	eph = ph + elf->e_phnum;
 	for(;ph < eph; ph++) {
-		if (ph->p_type == ELF_PROG_LOAD) {
-			if ((result = map_in_guest(guest, (uintptr_t) ph->p_pa, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0)
-				return -E_FAULT;
+		if ((result = map_in_guest(guest, (uintptr_t) ph->p_pa, ph->p_memsz, fd, ph->p_filesz, ph->p_offset)) < 0) {
+			cprintf("Error mapping EPT page in guest %e\n", result);
+			close(fd);
+			return result;
 		}
 	}
 	/* STAB segments are optional.
@@ -151,7 +180,6 @@ copy_guest_kern_gpa( envid_t guest, char* fname ) {
 	//cprintf("[VMM] DEBUG: copy_guest_kern_gpa: Completed segment processing\n");  // debug
 
 	close(fd);
-	fd = -1;
 
 	return 0;
 	// return -E_NO_SYS;

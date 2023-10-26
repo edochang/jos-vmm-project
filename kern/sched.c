@@ -60,9 +60,9 @@ sched_yield(void)
 					continue;
 				}
 				//cprintf("[VMM] DEBUG: I'm a VMM! Wanting to run VMX root privileges for Guest VM");
-				int vmxon_result = vmxon();
+				r = vmxon();
 				// vmxon can fail; if it does, destroy the env and try the next one
-				if (vmxon_result < 0) {
+				if (r < 0) {
 					//cprintf("[VMM] Error VMXON failed to start");
 					//cprintf("[VMM] Cleanup VM environment");
 					env_destroy(&envs[k]);
@@ -77,11 +77,11 @@ sched_yield(void)
 	if (curenv && curenv->env_status == ENV_RUNNING) {
 #ifndef VMM_GUEST
 		if (curenv->env_type == ENV_TYPE_GUEST) {
-			if (curenv->env_vmxinfo.vcpunum != cpunum()) {
-				return;
-			}
-			int vmxon_result = vmxon();
-			if (vmxon_result < 0) {
+			// if (curenv->env_vmxinfo.vcpunum != cpunum()) {
+			//	return;
+			// }
+			r = vmxon();
+			if (r < 0) {
 				//cprintf("Error: VMXON failed to start");
 				//cprintf("[VMM] Cleanup VM environment");
 				env_destroy(curenv);
