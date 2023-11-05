@@ -225,7 +225,7 @@ handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
 	cpuid(eax_initial, &eax, &ebx, &ecx, &edx);
 	// If requesting basic CPUID Information with the initial trapframe EAX = 01H, override the vmx bit to be 0.
 	if (eax_initial == 1) {
-		ecx = ecx & 0xFFFFFFDF;
+		ecx = ecx & 0xFFFFFFDF;  // binary mask: 11111111111111111111111111011111
 		vmx_bit = BIT( ecx, 5 );
 		if(vmx_bit == 0) {
 			//cprintf("Debug: ecx bit 5: %d \n", vmx_bit);
@@ -273,7 +273,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	/* Group 7 Local Variables */
 	
 	// Defines the number of memory map segments
-	int memory_segments = 3;
+	int memory_map_segments = 3;
 	// Holds the memory map information for the low, I/O hole, and high memory segments.
 	// Note: In multiboot_read(), it reads an mmap_list array, could use an array / list instead.
 	memory_map_t lo_mem_segment, ioh_mem_segment, hi_mem_segment;
@@ -348,8 +348,8 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page
 		/* If bit 6 in the ‘flags’ word is set, then the ‘mmap_*’ fields are valid, and indicate the address and length of a buffer containing a memory map of the machine provided by the BIOS. ‘mmap_addr’ is the address, and ‘mmap_length’ is the total size of the buffer.
 		*/
-		mbinfo.flags = MB_FLAG_MMAP; // base10 = 64, binary 1000000
-		mbinfo.mmap_length = mem_segment_size * 3;
+		mbinfo.flags = MB_FLAG_MMAP; // base10: 64, binary: 1000000
+		mbinfo.mmap_length = mem_segment_size * memory_map_segments;
 		mbinfo.mmap_addr = mmap_addr;  // memory map will be stored right after mbinfo.
 
 		//cprintf("Debug: sizeof(mbinfo): %d \n", sizeof(mbinfo)); // debug
