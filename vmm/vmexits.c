@@ -214,7 +214,37 @@ bool
 handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
 {
 	/* Your code here  */
-    panic("handle_cpuid is not impemented\n");
+    //panic("handle_cpuid is not impemented\n");
+	bool handled = false;
+	uint32_t eax_initial, eax, ebx, ecx, edx;
+	int vmx_bit;
+
+	//cprintf( "vmx: rax 0x%016llx rbx 0x%016llx rcx 0x%016llx rdx 0x%016llx rdi 0x%016llx rsi 0x%016llx \n", tf->tf_regs.reg_rax, tf->tf_regs.reg_rbx, tf->tf_regs.reg_rcx, tf->tf_regs.reg_rdx, tf->tf_regs.reg_rdi, tf->tf_regs.reg_rsi);
+
+	eax_initial = (uint32_t)tf->tf_regs.reg_rax;
+	cpuid(eax_initial, &eax, &ebx, &ecx, &edx);
+	// If requesting basic CPUID Information with the initial trapframe EAX = 01H, override the vmx bit to be 0.
+	if (eax_initial == 1) {
+		ecx = ecx & 0xFFFFFFDF;
+		vmx_bit = BIT( ecx, 5 );
+		if(vmx_bit == 0) {
+			//cprintf("Debug: ecx bit 5: %d \n", vmx_bit);
+			handled = true;
+		}
+	} else {
+		handled = true;
+	}
+	
+	tf->tf_regs.reg_rax = (uint64_t)eax;
+	tf->tf_regs.reg_rbx = (uint64_t)ebx;
+	tf->tf_regs.reg_rcx = (uint64_t)ecx;
+	tf->tf_regs.reg_rdx = (uint64_t)edx;
+
+	if(handled) {
+		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
+		cprintf("Debug: completed handle_cpuid \n");
+		return handled;
+	}
     return false;
 }
 
