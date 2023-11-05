@@ -358,7 +358,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		//cprintf("Debug: memcpy mbinfo \n");  // debug
 		memcpy((void *)hva_pg, (void *)&mbinfo, sizeof(multiboot_info_t));
 
-		hva_pg_addr_lo = &hva_pg + sizeof(multiboot_info_t);
+		hva_pg_addr_lo = hva_pg + sizeof(multiboot_info_t);
 		hva_pg_addr_ioh = hva_pg_addr_lo + sizeof(memory_map_t);
 		hva_pg_addr_hi = hva_pg_addr_ioh + sizeof(memory_map_t);
 
