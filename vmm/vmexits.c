@@ -214,13 +214,14 @@ bool
 handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
 {
 	/* Your code here  */
-	uint32_t info = (uint32_t)tf->tf_regs.reg_rax;
+	//panic("handle_cpuid is not impemented\n");
+	uint32_t initial_eax = (uint32_t)tf->tf_regs.reg_rax;
 	uint32_t eax, ebx, ecx, edx;
-	cpuid( info, &eax, &ebx, &ecx, &edx );
-
+	cpuid( initial_eax, &eax, &ebx, &ecx, &edx );
+	// If requesting basic CPUID Information with the initial trapframe EAX = 01H, override the vmx bit to be 0.
 	// Clear the vmx bit.
-	if (info == 1) {
-		ecx = ecx & ~(1 << 5);
+	if (initial_eax == 1) {
+		ecx = ecx & ~(1 << 5);  // binary mask: 11111111111111111111111111011111
 	}
 	tf->tf_regs.reg_rax = (uint64_t)eax;
 	tf->tf_regs.reg_rbx = (uint64_t)ebx;
@@ -229,7 +230,6 @@ handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
     
 	tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
 
-	// TODO(qing): when will it be false?
 	return true;
 }
 
@@ -254,9 +254,25 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	uint32_t val;
 	// phys address of the multiboot map in the guest.
 	uint64_t multiboot_map_addr = 0x6000;
+
+	/* Group 7 Local Variables */
+	
+	// Defines the number of memory map segments
+	int memory_map_segments = 3;
+	// Holds the memory map information for the low, I/O hole, and high memory segments.
+	// Note: In multiboot_read(), it reads an mmap_list array, could use an array / list instead.
+	memory_map_t lo_mem_segment, ioh_mem_segment, hi_mem_segment;
+	
+	//int32_t mem_segment_size = 0x14;  // 20 bytes minimum (Typical e820 segment size)
+	
+	// sizeof(memory_map_t); 24 bytes
+	size_t mem_segment_size = sizeof(memory_map_t);
+	uint64_t mmap_addr = multiboot_map_addr + sizeof(multiboot_info_t);
+	void *hva_pg_addr_lo, *hva_pg_addr_ioh, *hva_pg_addr_hi;
+
 	switch(tf->tf_regs.reg_rax) {
 	case VMX_VMCALL_MBMAP:
-        /* Hint: */
+		/* Hint: */
 		// Craft a multiboot (e820) memory map for the guest.
 		//
 		// Create three  memory mapping segments: 640k of low mem, the I/O hole (unusable), and 
@@ -267,45 +283,89 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page, and return
 		//   a pointer to this region in rbx (as a guest physical address).
 		/* Your code here */
-		if (gInfo->phys_sz < 1024000) {
+		// If the guest doesn't have enough memory allocated to it, then the VMX_VMCALL_MBMAP will not be handled.
+		if (gInfo->phys_sz < EXTPHYSMEM) {
 			cprintf("VMX_VMCALL_MBMAP: phys_sz is smaller than 1024k.\n");
 			break;
 		}
-		memory_map_t low_mem, io_hole, high_mem;
-		low_mem.base_addr_low = 0;
-		low_mem.base_addr_high = 0;
-		low_mem.length_low = 640000;
-		low_mem.length_high = 0;
-		low_mem.type = MB_TYPE_USABLE;
 
-		io_hole.base_addr_low = 640000;
-		io_hole.base_addr_high = 0;
-		io_hole.length_low = 1024000 - 640000;
-		io_hole.length_high = 0;
-		io_hole.type = MB_TYPE_RESERVED;
+		//cprintf("Debug: Define low memory segment \n");  // debug
+		// Define Low Memory Segment
+		lo_mem_segment.size = mem_segment_size;
+		lo_mem_segment.base_addr_low = 0x0;
+		lo_mem_segment.base_addr_high = 0x0;
+		lo_mem_segment.length_low = IOPHYSMEM;
+		lo_mem_segment.length_high = 0x0;
+		lo_mem_segment.type = MB_TYPE_USABLE;
 
-		uint64_t high_mem_length = gInfo->phys_sz - 1024000;
-		high_mem.base_addr_low = 1024000;
-		high_mem.base_addr_high = 0;
-		high_mem.length_low = (uint32_t)high_mem_length;
-		high_mem.length_high = (uint32_t)(high_mem_length>>32);
-		high_mem.type = MB_TYPE_USABLE;
+		//cprintf("Debug: Define I/O hole memory segment \n");  // debug
+		// Define I/O Hole (Reserved) Memory Segment
+		ioh_mem_segment.size = mem_segment_size;
+		ioh_mem_segment.base_addr_low = IOPHYSMEM;
+		ioh_mem_segment.base_addr_high = 0x0;
+		ioh_mem_segment.length_low = EXTPHYSMEM - IOPHYSMEM;
+		ioh_mem_segment.length_high = 0x0;
+		ioh_mem_segment.type = MB_TYPE_RESERVED;
 
-		mbinfo.flags = MB_FLAG_MMAP;
+		//cprintf("Debug: Define high memory segment \n");  // debug
+		// Define High Memory Segment
+		hi_mem_segment.size = mem_segment_size;
+		hi_mem_segment.base_addr_low = EXTPHYSMEM;
+		hi_mem_segment.base_addr_high = 0x0;
+		hi_mem_segment.length_low = (uint32_t)(((gInfo->phys_sz - EXTPHYSMEM) << 32) >> 32);
+		hi_mem_segment.length_high = (uint32_t)((gInfo->phys_sz - EXTPHYSMEM) >> 32);
+		hi_mem_segment.type = MB_TYPE_USABLE;
 
-		// TODO(qing): gpa vs. hva
-		uint32_t mmap_size= sizeof(memory_map_t);
-		mbinfo.mmap_addr = multiboot_map_addr + sizeof(multiboot_info_t);
-		mbinfo.mmap_length = 3 * mmap_size;
-		memcpy((void*)(uint64_t)(mbinfo.mmap_addr), &low_mem, mmap_size);
-		memcpy((void*)(uint64_t)(mbinfo.mmap_addr + mmap_size), &io_hole, mmap_size);
-		memcpy((void*)(uint64_t)(mbinfo.mmap_addr + mmap_size * 2), &high_mem, mmap_size);
+		//cprintf("Debug: Find hva_pg if it exists \n");
+		ept_gpa2hva(eptrt, (void*) multiboot_map_addr, &hva_pg);
+		// Took inspirations from handle_eptviolation()
+		if(!hva_pg) {
+			//cprintf("Debug: hva_pg doesn't exist, so allocate it \n");  // debug
+			// Allocate a new page to the guest.
+			struct PageInfo *p = page_alloc(ALLOC_ZERO);
+			if(!p) {
+				cprintf("vmm: handle_vmcall:VMX_VMCALL_MBMAP: Failed to allocate a page for guest---out of memory.\n");
+				return false;
+			}
+			p->pp_ref += 1;
+			hva_pg = page2kva(p);
+			r = ept_map_hva2gpa(eptrt, hva_pg, (void *)ROUNDDOWN(multiboot_map_addr, PGSIZE), __EPTE_FULL, 0);
+			assert(r >= 0);
+		}
 
+		//cprintf("Debug: Set mbinfo \n");  // debug
+
+		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page
+		/* If bit 6 in the ‘flags’ word is set, then the ‘mmap_*’ fields are valid, and indicate the address and length of a buffer containing a memory map of the machine provided by the BIOS. ‘mmap_addr’ is the address, and ‘mmap_length’ is the total size of the buffer.
+		*/
+		mbinfo.flags = MB_FLAG_MMAP; // base10: 64, binary: 1000000
+		mbinfo.mmap_length = mem_segment_size * memory_map_segments;
+		mbinfo.mmap_addr = mmap_addr;  // memory map will be stored right after mbinfo.
+
+		//cprintf("Debug: sizeof(mbinfo): %d \n", sizeof(mbinfo)); // debug
+		//cprintf("Debug: sizeof(multiboot_info_t): %d \n", sizeof(multiboot_info_t)); // debug
+
+		//cprintf("Debug: memcpy mbinfo \n");  // debug
+		memcpy((void *)hva_pg, (void *)&mbinfo, sizeof(multiboot_info_t));
+
+		hva_pg_addr_lo = hva_pg + sizeof(multiboot_info_t);
+		hva_pg_addr_ioh = hva_pg_addr_lo + sizeof(memory_map_t);
+		hva_pg_addr_hi = hva_pg_addr_ioh + sizeof(memory_map_t);
+
+		//cprintf("Debug: memcpy lo_mem_segment:: hva_pg_addr_lo: %x, lo_mem_segment: %x, mem_segment_size: %d \n", hva_pg_addr_lo, (void*)&lo_mem_segment, mem_segment_size);  // debug
+		memcpy(hva_pg_addr_lo, (void *)&lo_mem_segment, mem_segment_size);
+		//cprintf("Debug: memcpy ioh_mem_segment:: hva_pg_addr_ioh: %x, ioh_mem_segment: %x, mem_segment_size: %d \n", hva_pg_addr_ioh, (void*)&ioh_mem_segment, mem_segment_size);  // debug
+		memcpy(hva_pg_addr_ioh, (void *)&ioh_mem_segment, mem_segment_size);
+		//cprintf("Debug: memcpy hi_mem_segment:: hva_pg_addr_hi: %x, hi_mem_segment: %x, mem_segment_size: %d \n", hva_pg_addr_hi, (void*)&hi_mem_segment, mem_segment_size);  // debug
+		memcpy(hva_pg_addr_hi, (void *)&hi_mem_segment, mem_segment_size);
+		
+		// a pointer to this region in rbx (as a guest physical address).
 		tf->tf_regs.reg_rbx = multiboot_map_addr;
 		handled = true;
+		cprintf("Debug: completed VMX_VMCALL_MBMAP \n");
 		break;
 	case VMX_VMCALL_IPCSEND:
-        /* Hint: */
+		/* Hint: */
 		// Issue the sys_ipc_send call to the host.
 		// 
 		// If the requested environment is the HOST FS, this call should
@@ -313,7 +373,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		//
 		// The input should be a guest physical address; you will need to convert
 		//  this to a host virtual address for the IPC to work properly.
-        //  Then you should call sys_ipc_try_send()
+		//  Then you should call sys_ipc_try_send()
 		/* Your code here */
 		break;
 
@@ -336,7 +396,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	case VMX_VMCALL_GETDISKIMGNUM:	//alloc a number to guest
 		tf->tf_regs.reg_rax = vmdisk_number;
 		handled = true;
-		break;
+		break;		
          
 	}
 	if(handled) {
