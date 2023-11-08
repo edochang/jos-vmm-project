@@ -214,8 +214,15 @@ bool
 handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
 {
 	/* Your code here  */
-    panic("handle_cpuid is not impemented\n");
-    return false;
+	uint32_t eax, ebx, ecx, edx;
+	cpuid( (uint32_t)tf->tf_regs.reg_rax, &eax, &ebx, &ecx, &edx );
+	tf->tf_regs.reg_rax = (uint64_t)eax;
+	tf->tf_regs.reg_rbx = (uint64_t)ebx;
+	tf->tf_regs.reg_rcx = (uint64_t)ecx;
+	tf->tf_regs.reg_rdx = (uint64_t)edx;
+	tf->tf_rip = tf->tf_rip + vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH )
+    // panic("handle_cpuid is not impemented\n");
+    return true;
 }
 
 // Handle vmcall traps from the guest.
