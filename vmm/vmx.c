@@ -1,4 +1,4 @@
-#line 2 "../vmm/vmx.c"
+// #line 2 "../vmm/vmx.c"
 
 #include <vmm/vmx.h>
 #include <vmm/vmx_asm.h>
@@ -344,9 +344,9 @@ void vmcs_guest_init() {
 
 	vmcs_write64( VMCS_GUEST_CR3, 0 );
 	vmcs_write64( VMCS_GUEST_CR0, CR0_NE );
-#line 318 "../vmm/vmx.c"
+// #line 318 "../vmm/vmx.c"
 	vmcs_write64( VMCS_GUEST_CR4, CR4_VMXE );
-#line 320 "../vmm/vmx.c"
+// #line 320 "../vmm/vmx.c"
 	vmcs_write64( VMCS_64BIT_GUEST_LINK_POINTER, 0xffffffff );
 	vmcs_write64( VMCS_64BIT_GUEST_LINK_POINTER_HI, 0xffffffff );
 	vmcs_write64( VMCS_GUEST_DR7, 0x0 );
@@ -468,9 +468,10 @@ void vmexit() {
 	static uint32_t host_vector;
 	// Get the reason for VMEXIT from the VMCS.
 	// Your code here.
+	exit_reason = vmcs_read32(VMCS_32BIT_VMEXIT_REASON);
 
-	//cprintf( "---VMEXIT Reason: %d---\n", exit_reason );
-	/* vmcs_dump_cpu(); */
+	cprintf( "---VMEXIT Reason: %d---\n", exit_reason );
+	vmcs_dump_cpu();
 
 	switch(exit_reason & EXIT_REASON_MASK) {
         case EXIT_REASON_EXTERNAL_INT:
