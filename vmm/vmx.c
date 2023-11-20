@@ -1,4 +1,4 @@
-// #line 2 "../vmm/vmx.c"
+#line 2 "../vmm/vmx.c"
 
 #include <vmm/vmx.h>
 #include <vmm/vmx_asm.h>
@@ -344,9 +344,9 @@ void vmcs_guest_init() {
 
 	vmcs_write64( VMCS_GUEST_CR3, 0 );
 	vmcs_write64( VMCS_GUEST_CR0, CR0_NE );
-// #line 318 "../vmm/vmx.c"
+#line 318 "../vmm/vmx.c"
 	vmcs_write64( VMCS_GUEST_CR4, CR4_VMXE );
-// #line 320 "../vmm/vmx.c"
+#line 320 "../vmm/vmx.c"
 	vmcs_write64( VMCS_64BIT_GUEST_LINK_POINTER, 0xffffffff );
 	vmcs_write64( VMCS_64BIT_GUEST_LINK_POINTER_HI, 0xffffffff );
 	vmcs_write64( VMCS_GUEST_DR7, 0x0 );
@@ -471,6 +471,8 @@ void vmexit() {
 	exit_reason = vmcs_read32(VMCS_32BIT_VMEXIT_REASON);
 	cprintf( "---VMEXIT Reason: %d---\n", exit_reason );
 	/* vmcs_dump_cpu(); */
+
+	//cprintf( "VCPU vmx: CR3 (during vmexit) 0x%016llx\n", vmcs_read64( VMCS_GUEST_CR3 ) );
 
 	switch(exit_reason & EXIT_REASON_MASK) {
         case EXIT_REASON_EXTERNAL_INT:
@@ -656,6 +658,7 @@ void asm_vmrun(struct Trapframe *tf) {
 	} else {
 		curenv->env_tf.tf_rsp = vmcs_read64(VMCS_GUEST_RSP);
 		curenv->env_tf.tf_rip = vmcs_read64(VMCS_GUEST_RIP);
+		//cprintf( "VCPU vmx: CR3 (before vmexit) 0x%016llx\n", vmcs_read64( VMCS_GUEST_CR3 ) );
 		vmexit();
 	}
 }
