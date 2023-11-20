@@ -215,20 +215,36 @@ handle_cpuid(struct Trapframe *tf, struct VmxGuestInfo *ginfo)
 {
 	/* Your code here  */
 	//panic("handle_cpuid is not impemented\n");
-	uint32_t initial_eax = (uint32_t)tf->tf_regs.reg_rax;
+	// --- LAB 3 --- 
 	uint32_t eax, ebx, ecx, edx;
+
+	// determine the info value to use based on the value of rax in the trapframe
+	uint32_t initial_eax = (uint32_t)tf->tf_regs.reg_rax;
 	cpuid( initial_eax, &eax, &ebx, &ecx, &edx );
+	
 	// If requesting basic CPUID Information with the initial trapframe EAX = 01H, override the vmx bit to be 0.
 	// Clear the vmx bit.
+
+	// if info == 1, processor features were requested. we want to hide the presence of vmx from 
+	// the guest if this is the case
+	// 0x20 is 100000. ~ it to set all bits but the 5th one to 0
+	// then bitwise AND with ecx to zero out the 5th bit while keeping 
+	// all other bits the same
 	if (initial_eax == 1) {
 		ecx = ecx & ~(1 << 5);  // binary mask: 11111111111111111111111111011111
+		//ecx &= ~0x20U; // TA Solution
 	}
+
+	// then store the output in the trapframe
 	tf->tf_regs.reg_rax = (uint64_t)eax;
 	tf->tf_regs.reg_rbx = (uint64_t)ebx;
 	tf->tf_regs.reg_rcx = (uint64_t)ecx;
 	tf->tf_regs.reg_rdx = (uint64_t)edx;
-    
+
+    // update the instruction pointer
 	tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
+
+	//cprintf("Debug: completed handle_cpuid \n");
 
 	return true;
 }
@@ -259,9 +275,6 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	
 	// Defines the number of memory map segments
 	int memory_map_segments = 3;
-	// Holds the memory map information for the low, I/O hole, and high memory segments.
-	// Note: In multiboot_read(), it reads an mmap_list array, could use an array / list instead.
-	memory_map_t lo_mem_segment, ioh_mem_segment, hi_mem_segment;
 	
 	//int32_t mem_segment_size = 0x14;  // 20 bytes minimum (Typical e820 segment size)
 	
@@ -269,6 +282,8 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	size_t mem_segment_size = sizeof(memory_map_t);
 	uint64_t mmap_addr = multiboot_map_addr + sizeof(multiboot_info_t);
 	void *hva_pg_addr_lo, *hva_pg_addr_ioh, *hva_pg_addr_hi;
+
+	cprintf("Debug: rax: %d \n", tf->tf_regs.reg_rax);
 
 	switch(tf->tf_regs.reg_rax) {
 	case VMX_VMCALL_MBMAP:
@@ -283,69 +298,109 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page, and return
 		//   a pointer to this region in rbx (as a guest physical address).
 		/* Your code here */
+		
+		// -- LAB 3 --
+
+		// this involves creating a "fake" memory map, stored in the mbinfo struct, to give to the guest
+		// first wipe the mbinfo struct to make sure there is no garbage data there
+		memset(&mbinfo, 0, sizeof(mbinfo));
+
+		// we are creating a memroy map, so set the flags appropriately
+		//cprintf("Debug: Set mbinfo \n");  // debug	
+
+		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page
+		/* If bit 6 in the ‘flags’ word is set, then the ‘mmap_*’ fields are valid, and indicate the address and length of a buffer containing a memory map of the machine provided by the BIOS. ‘mmap_addr’ is the address, and ‘mmap_length’ is the total size of the buffer.
+		*/
+		mbinfo.flags |= MB_FLAG_MMAP; // TA Solution
+		//mbinfo.flags = MB_FLAG_MMAP; // base10: 64, binary: 1000000
+		// we are going to create 3 memory mapping segments
+		mbinfo.mmap_length = mem_segment_size * memory_map_segments;
+		// set the address of the location to copy the mapping segments. they will come just after 
+		// the mbinfo struct
+		//mbinfo.mmap_addr = multiboot_map_addr + sizeof(mbinfo); // TA Solution
+		mbinfo.mmap_addr = mmap_addr;  // memory map will be stored right after mbinfo.
+
+		//cprintf("Debug: sizeof(mbinfo): %d \n", sizeof(mbinfo)); // debug
+		//cprintf("Debug: sizeof(multiboot_info_t): %d \n", sizeof(multiboot_info_t)); // debug
+
+		// now create and fill in the memory_map_t's for the three mapping segments
+		// in memory_map_t, base_addr_low/base_addr_high and length_low/length_high are used to 
+		// store 64-bit values in 32-bit variables. *_low should store the lower 32 bits and *_high
+		// should store the upper 32 bits.
+		
+		// Holds the memory map information for the low, I/O hole, and high memory segments.
+		// Note: In multiboot_read(), it reads an mmap_list array, could use an array / list instead.
+		memory_map_t lo_mem_segment, ioh_mem_segment, hi_mem_segment;
+
+		// base addresses of each segment (from assignment document):
+		// - low memory: 0
+		// - IO hole: 640k (right after low memory)
+		// - high memory: 1024k (right after the IO hole)
+
 		// If the guest doesn't have enough memory allocated to it, then the VMX_VMCALL_MBMAP will not be handled.
 		if (gInfo->phys_sz < EXTPHYSMEM) {
 			cprintf("VMX_VMCALL_MBMAP: phys_sz is smaller than 1024k.\n");
 			break;
 		}
 
+		// set up low mem
 		//cprintf("Debug: Define low memory segment \n");  // debug
 		// Define Low Memory Segment
+		memset(&lo_mem_segment, 0, sizeof(lo_mem_segment));  // TA Solution
 		lo_mem_segment.size = mem_segment_size;
 		lo_mem_segment.base_addr_low = 0x0;
 		lo_mem_segment.base_addr_high = 0x0;
-		lo_mem_segment.length_low = IOPHYSMEM;
+		lo_mem_segment.length_low = IOPHYSMEM; // 640k
 		lo_mem_segment.length_high = 0x0;
 		lo_mem_segment.type = MB_TYPE_USABLE;
 
+		// set up io hole
 		//cprintf("Debug: Define I/O hole memory segment \n");  // debug
 		// Define I/O Hole (Reserved) Memory Segment
+		memset(&ioh_mem_segment, 0, sizeof(ioh_mem_segment));  // TA Solution
 		ioh_mem_segment.size = mem_segment_size;
 		ioh_mem_segment.base_addr_low = IOPHYSMEM;
 		ioh_mem_segment.base_addr_high = 0x0;
-		ioh_mem_segment.length_low = EXTPHYSMEM - IOPHYSMEM;
+		ioh_mem_segment.length_low = EXTPHYSMEM - IOPHYSMEM; // 1024k - 640k from the low memory
 		ioh_mem_segment.length_high = 0x0;
-		ioh_mem_segment.type = MB_TYPE_RESERVED;
+		ioh_mem_segment.type = MB_TYPE_RESERVED; // unusable
 
+		// set up high mem
 		//cprintf("Debug: Define high memory segment \n");  // debug
 		// Define High Memory Segment
+		memset(&hi_mem_segment, 0, sizeof(hi_mem_segment));  // TA Solution
 		hi_mem_segment.size = mem_segment_size;
 		hi_mem_segment.base_addr_low = EXTPHYSMEM;
 		hi_mem_segment.base_addr_high = 0x0;
-		hi_mem_segment.length_low = (uint32_t)(((gInfo->phys_sz - EXTPHYSMEM) << 32) >> 32);
+		// then make sure to handle both the lower and upper 32 bits
+		//hi_mem_segment.length_low = (uint32_t)(((gInfo->phys_sz - EXTPHYSMEM) << 32) >> 32);
+		hi_mem_segment.length_low = (uint32_t)(gInfo->phys_sz - EXTPHYSMEM);  // TA Solution
 		hi_mem_segment.length_high = (uint32_t)((gInfo->phys_sz - EXTPHYSMEM) >> 32);
 		hi_mem_segment.type = MB_TYPE_USABLE;
 
 		//cprintf("Debug: Find hva_pg if it exists \n");
 		ept_gpa2hva(eptrt, (void*) multiboot_map_addr, &hva_pg);
 		// Took inspirations from handle_eptviolation()
+		// if the hva doesn't exist, allocate and map it
 		if(!hva_pg) {
 			//cprintf("Debug: hva_pg doesn't exist, so allocate it \n");  // debug
 			// Allocate a new page to the guest.
 			struct PageInfo *p = page_alloc(ALLOC_ZERO);
+			//struct PageInfo* p = page_alloc(0);  // TA Solution
 			if(!p) {
 				cprintf("vmm: handle_vmcall:VMX_VMCALL_MBMAP: Failed to allocate a page for guest---out of memory.\n");
 				return false;
 			}
 			p->pp_ref += 1;
 			hva_pg = page2kva(p);
-			r = ept_map_hva2gpa(eptrt, hva_pg, (void *)ROUNDDOWN(multiboot_map_addr, PGSIZE), __EPTE_FULL, 0);
+			//r = ept_map_hva2gpa(eptrt, hva_pg, (void *)ROUNDDOWN(multiboot_map_addr, PGSIZE), __EPTE_FULL, 0);
+			r = ept_map_hva2gpa(eptrt, hva_pg, (void*)multiboot_map_addr, __EPTE_FULL, 0);  // TA Solution
 			assert(r >= 0);
-		}
-
-		//cprintf("Debug: Set mbinfo \n");  // debug
-
-		// Copy the mbinfo and memory_map_t (segment descriptions) into the guest page
-		/* If bit 6 in the ‘flags’ word is set, then the ‘mmap_*’ fields are valid, and indicate the address and length of a buffer containing a memory map of the machine provided by the BIOS. ‘mmap_addr’ is the address, and ‘mmap_length’ is the total size of the buffer.
-		*/
-		mbinfo.flags = MB_FLAG_MMAP; // base10: 64, binary: 1000000
-		mbinfo.mmap_length = mem_segment_size * memory_map_segments;
-		mbinfo.mmap_addr = mmap_addr;  // memory map will be stored right after mbinfo.
-
-		//cprintf("Debug: sizeof(mbinfo): %d \n", sizeof(mbinfo)); // debug
-		//cprintf("Debug: sizeof(multiboot_info_t): %d \n", sizeof(multiboot_info_t)); // debug
+		}	
 
 		//cprintf("Debug: memcpy mbinfo \n");  // debug
+
+		// then, copy the mapping structures into that page
 		memcpy((void *)hva_pg, (void *)&mbinfo, sizeof(multiboot_info_t));
 
 		hva_pg_addr_lo = hva_pg + sizeof(multiboot_info_t);
@@ -360,9 +415,13 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		memcpy(hva_pg_addr_hi, (void *)&hi_mem_segment, mem_segment_size);
 		
 		// a pointer to this region in rbx (as a guest physical address).
+		// set rbx to the multiboot region
 		tf->tf_regs.reg_rbx = multiboot_map_addr;
+		
+		// and indicate that we've handled the exit
 		handled = true;
-		cprintf("Debug: completed VMX_VMCALL_MBMAP \n");
+		
+		//cprintf("Debug: completed VMX_VMCALL_MBMAP \n");
 		break;
 	case VMX_VMCALL_IPCSEND:
 		/* Hint: */
@@ -405,6 +464,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		 * Hint: The solution does not hard-code the length of the vmcall instruction.
 		 */
 		/* Your code here */
+		// --- LAB 3 --
 		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
 	}
 	return handled;

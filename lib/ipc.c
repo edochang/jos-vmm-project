@@ -85,10 +85,16 @@ ipc_host_recv(void *pg) {
     physaddr_t pa = PTE_ADDR(uvpt[PGNUM(pg)]);
 
     // ISSUE VMCALL
+	// ~ LAB 4 ~
+	asm("vmcall"
+			: "=a"(r), "=S"(val)
+			: "0"(VMX_VMCALL_IPCRECV), "b"(pa)
+		);
 
     if (r < 0) {
 		return r;
 	}
+	return val;
 
 }
 
@@ -108,10 +114,22 @@ ipc_host_send(envid_t to_env, uint32_t val, void *pg, int perm)
     physaddr_t pa = PTE_ADDR(uvpt[PGNUM(pg)]);
 
     // ISSUE FIRST VMCALL
+	// ~ LAB 4 ~
+
+	asm("vmcall" // issue vmcall
+			: "=a"(r) // put output into rax
+			: "0"(VMX_VMCALL_IPCSEND), "b"(to_env), "c"(val), "d"(pa), "S"(perm)
+			);
+	// retry until the send succeeds
     while(r == -E_IPC_NOT_RECV) {
 		sys_yield();
 		// TRY VMCALL REPEATEDLY UNTIL YOU GET A RESPONSE
+		asm("vmcall"
+			: "=a"(r) 
+			: "0"(VMX_VMCALL_IPCSEND), "b"(to_env), "c"(val), "d"(pa), "S"(perm)
+			);
 	}
+	
 	if (r < 0)
 		panic("error in ipc_send: %e", r);
 
