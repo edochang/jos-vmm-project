@@ -324,6 +324,27 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
     /*  Hint: check if environment is ENV_TYPE_GUEST or not, and if the source or destination 
      *  is using normal page, use page_insert. Use ept_page_insert() wherever possible. */
     /* Your code here */
+#ifndef VMM_GUEST
+	if (e->env_type = ENV_TYPE_GUEST) {
+
+		if (srcva < (void*) UTOP) {
+			pp = page_lookup(curenv->env_pml4e, srcva, &ppte);
+        	if (pp == 0) {
+				cprintf("[%08x] page_lookup %08x failed in sys_ipc_try_send\n", curenv->env_id, srcva);
+				return -E_INVAL;
+        	}
+
+			ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, perm)
+
+			e->env_ipc_perm = perm;
+
+			// If the dest environment is GUEST, then the rsi register of the trapframe should be set with 'value'.
+			e->env_tf.tf_regs.reg_rsi = value;
+		} else {
+			e->env_ipc_perm = 0;
+		}
+	} 
+#endif
 
     if (srcva < (void*) UTOP && e->env_ipc_dstva < (void*) UTOP) {
         if ((~perm & (PTE_U|PTE_P)) || (perm & ~PTE_SYSCALL)) {
@@ -377,6 +398,10 @@ sys_ipc_recv(void *dstva)
 {
 	if (curenv->env_ipc_recving)
 		panic("already recving!");
+
+	if (dstva < (void*) UTOP && dstva != ROUNDDOWN(dstva, PGSIZE)){
+		return -E_INVAL;
+	}
 
 	curenv->env_ipc_recving = 1;
 	curenv->env_ipc_dstva = dstva;

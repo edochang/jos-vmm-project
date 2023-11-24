@@ -434,6 +434,31 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		//  this to a host virtual address for the IPC to work properly.
 		//  Then you should call sys_ipc_try_send()
 		/* Your code here */
+
+		// The type of the destination env in %rbx.  Per the ipc_host_send() rbx should be an envid_t value.
+		to_env = tf->tf_regs.reg_rbx;
+
+		// In vmx.h, #define VMX_HOST_FS_ENV 0x1
+		if (to_env != 0x1) {
+			return -E_INVAL;
+		}
+		
+		// The value to send in %rcx
+		val = tf->tf_regs.reg_rcx;
+		
+		// The physical address of a page to send in %rdx
+		gpa_pg = tf->tf_regs.reg_rdx;
+		ept_gpa2hva(eptrt, gpa_pg, &hva_pg);
+
+		// The permissions for the sent page in %rsi
+		perm = tf->tf_regs.reg_rsi;
+
+		if ((r = sys_ipc_try_send(to_env, val, hva_pg, perm)) < 0) {
+			cprintf("vmm: sys_ipc_recv failed to receive with error %d \n", r);
+		}
+		
+		
+
 		break;
 
 	case VMX_VMCALL_IPCRECV:
@@ -441,6 +466,19 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// NB: because recv can call schedule, clobbering the VMCS, 
 		// you should go ahead and increment rip before this call.
 		/* Your code here */
+
+		// The VMX_VMCALL_IPCRECV vmcall places its error code into %rax and the received value into %rsi. It expects the destination address for a received page in %rbx.
+		hva_pg = tf->tf_regs.reg_rbx;
+
+		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
+		if ((r = sys_ipc_recv(hva_pg)) < 0) {
+			cprintf("vmm: sys_ipc_recv failed to receive with error %d \n", r);
+			tf->tf_regs.reg_rax = r;
+		}
+		
+		// TODO7: Where is the value from?
+		tf->tf_regs.reg_rsi = curenv->env_ipc_value;
+
 		break;
 	case VMX_VMCALL_LAPICEOI:
 		lapic_eoi();
