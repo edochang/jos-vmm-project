@@ -434,6 +434,38 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		//  this to a host virtual address for the IPC to work properly.
 		//  Then you should call sys_ipc_try_send()
 		/* Your code here */
+		// Check destination env type
+		if (tf->tf_regs.reg_rbx != ENV_TYPE_FS) {
+			// TODO(qye): E_INVAL or -E_INVAL
+			tf->tf_regs.reg_rax = -E_INVAL;
+			 handled = true;
+			break;
+		}
+
+		// TODO(qye): need to check if: corresponding to ENV_TYPE_FS at the host. 
+		// TODO(qye): may also need to check if it's running?
+		int i;
+		for (i = 0; i < NENV; i++) {
+			if (envs[i].env_type == ENV_TYPE_FS)
+				to_env = envs[i].env_id;
+		}
+
+		uint64_t value = tf->tf_regs.reg_rcx;
+		uint64_t gpa = tf->tf_regs.reg_rdx;
+		envid_t envid;
+		perm = tf->tf_regs.reg_rsi;
+		void *hva;
+		ept_gpa2hva(eptrt, (void*) gpa, &hva);
+		if (hva == NULL) {
+			// TODO(qye): handle error
+			panic("VMX_VMCALL_IPCSEND");
+		}
+	
+		// r = sys_ipc_try_send(to_env, (uint32_t)value, (void*)hva, perm);
+		r = syscall(SYS_ipc_try_send, to_env, value, (uint64_t)hva, perm, 0);
+		tf->tf_regs.reg_rax = r;
+
+		handled = true;
 		break;
 
 	case VMX_VMCALL_IPCRECV:
@@ -441,6 +473,18 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// NB: because recv can call schedule, clobbering the VMCS, 
 		// you should go ahead and increment rip before this call.
 		/* Your code here */
+		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
+		
+		// The destination address for a received page is expected in in %rbx.
+		uint64_t dstva = tf->tf_regs.reg_rbx;
+		// r = sys_ipc_recv((void*) dstva);
+		r = syscall(SYS_ipc_recv, dstva, 0, 0, 0, 0);
+
+		// The VMX_VMCALL_IPCRECV vmcall places its error code into %rax and 
+		// the received value into %rsi. 
+		// TODO(qy): restore received value into %rsi.
+		tf->tf_regs.reg_rax = r;
+		handled = true;
 		break;
 	case VMX_VMCALL_LAPICEOI:
 		lapic_eoi();
