@@ -434,35 +434,39 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		//  this to a host virtual address for the IPC to work properly.
 		//  Then you should call sys_ipc_try_send()
 		/* Your code here */
-		// Check destination env type
+		
+
+		// Check destination env type.  The type of the destination env in %rbx.  Per the ipc_host_send() rbx should be an envid_t value.
 		if (tf->tf_regs.reg_rbx != ENV_TYPE_FS) {
 			// TODO(qye): E_INVAL or -E_INVAL
 			tf->tf_regs.reg_rax = -E_INVAL;
-			 handled = true;
+			handled = true;
 			break;
 		}
 
-		// TODO(qye): need to check if: corresponding to ENV_TYPE_FS at the host. 
-		// TODO(qye): may also need to check if it's running?
+		// TODO7: The instruction mentions to set the to_env to the environment ID corresponding to the ENV_TYPE_FS at the host.  Inspect the envstore and check if there are more than one FS in jos.
 		int i;
 		for (i = 0; i < NENV; i++) {
 			if (envs[i].env_type == ENV_TYPE_FS)
 				to_env = envs[i].env_id;
 		}
 
-		uint64_t value = tf->tf_regs.reg_rcx;
-		uint64_t gpa = tf->tf_regs.reg_rdx;
-		envid_t envid;
+		// The value to send in %rcx
+		val = tf->tf_regs.reg_rcx;
+		
+		// The physical address of a page to send in %rdx
+		gpa_pg = tf->tf_regs.reg_rdx;
+		ept_gpa2hva(eptrt, gpa_pg, &hva_pg);
+
+		// The permissions for the sent page in %rsi
 		perm = tf->tf_regs.reg_rsi;
-		void *hva;
-		ept_gpa2hva(eptrt, (void*) gpa, &hva);
-		if (hva == NULL) {
-			// TODO(qye): handle error
-			panic("VMX_VMCALL_IPCSEND");
+
+		if (hva_pg == NULL) {
+			tf->tf_regs.reg_rax = -E_INVAL;
+			//panic("VMX_VMCALL_IPCSEND");
 		}
-	
-		// r = sys_ipc_try_send(to_env, (uint32_t)value, (void*)hva, perm);
-		r = syscall(SYS_ipc_try_send, to_env, value, (uint64_t)hva, perm, 0);
+
+		r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t)hva_pg, perm, 0);
 		tf->tf_regs.reg_rax = r;
 
 		handled = true;
@@ -473,18 +477,19 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		// NB: because recv can call schedule, clobbering the VMCS, 
 		// you should go ahead and increment rip before this call.
 		/* Your code here */
-		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
 		
-		// The destination address for a received page is expected in in %rbx.
-		uint64_t dstva = tf->tf_regs.reg_rbx;
-		// r = sys_ipc_recv((void*) dstva);
-		r = syscall(SYS_ipc_recv, dstva, 0, 0, 0, 0);
+		// The VMX_VMCALL_IPCRECV vmcall places its error code into %rax and the received value into %rsi. It expects the destination address for a received page in %rbx.
+		hva_pg = tf->tf_regs.reg_rbx;
 
-		// The VMX_VMCALL_IPCRECV vmcall places its error code into %rax and 
-		// the received value into %rsi. 
-		// TODO(qy): restore received value into %rsi.
+		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
+		r = syscall(SYS_ipc_recv, hva_pg, 0, 0, 0, 0);
 		tf->tf_regs.reg_rax = r;
+
+		// TODO7: Where is the value from?  Believe it sits with the VMM as the middleware between Host FS and Guest FS.  Verify it is curenv->env_ipc_value.
+		tf->tf_regs.reg_rsi = curenv->env_ipc_value;
+
 		handled = true;
+
 		break;
 	case VMX_VMCALL_LAPICEOI:
 		lapic_eoi();
