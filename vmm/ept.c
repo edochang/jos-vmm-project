@@ -193,14 +193,30 @@ int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
     
     epte_t *epte;
     int r;
-    r = ept_lookup_gpa(eptrt, gpa, 1, &epte);
-    if (epte == NULL) return -E_NO_MEM;
-    if (r < 0) return r;
-    if (*epte & PTE_P) {
-        page_remove((pml4e_t*)eptrt, gpa);
-	}
+
+    physaddr_t hpa = page2pa(pp);
+
+    if ((r = ept_lookup_gpa(eptrt, gpa, 1, &epte)) < 0) {
+        return r;
+    }
+    
+    if (epte_present(*epte)) {
+        // If the mapping already exists, then overwrite it and decrement the old page reference count
+	    //pa2page(epte_addr(*epte_out))->pp_ref -= 1;
+	    page_decref(pa2page(epte_addr(*epte)));  // Inspiration from free_ept_level()    
+
+        // Increment the reference count
+        pp->pp_ref++;
+        
+        *epte = hpa|__EPTE_TYPE(EPTE_TYPE_WB)|__EPTE_IPAT|perm;
+        // invalidate tlb entry for gpa, since we've changed the mapping
+		tlb_invalidate(eptrt, gpa);
+        return 0;
+    }
+    
+    // *epte is not present
     pp->pp_ref++;
-    *epte = page2pa(pp) | PTE_P | perm;
+    *epte = hpa|__EPTE_TYPE(EPTE_TYPE_WB)|__EPTE_IPAT|perm;
 
     return 0;
 }
