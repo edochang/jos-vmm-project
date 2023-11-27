@@ -283,7 +283,7 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 	uint64_t mmap_addr = multiboot_map_addr + sizeof(multiboot_info_t);
 	void *hva_pg_addr_lo, *hva_pg_addr_ioh, *hva_pg_addr_hi;
 
-	cprintf("Debug: rax: %d \n", tf->tf_regs.reg_rax);
+	//cprintf("Debug: rax: %d \n", tf->tf_regs.reg_rax);  // debug statement
 
 	switch(tf->tf_regs.reg_rax) {
 	case VMX_VMCALL_MBMAP:
@@ -438,7 +438,6 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 
 		// Check destination env type.  The type of the destination env in %rbx.  Per the ipc_host_send() rbx should be an envid_t value.
 		if (tf->tf_regs.reg_rbx != ENV_TYPE_FS) {
-			// TODO(qye): E_INVAL or -E_INVAL
 			tf->tf_regs.reg_rax = -E_INVAL;
 			handled = true;
 			break;
@@ -449,13 +448,14 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		for (i = 0; i < NENV; i++) {
 			if (envs[i].env_type == ENV_TYPE_FS)
 				to_env = envs[i].env_id;
+				break;
 		}
 
 		// The value to send in %rcx
 		val = tf->tf_regs.reg_rcx;
 		
 		// The physical address of a page to send in %rdx
-		gpa_pg = tf->tf_regs.reg_rdx;
+		gpa_pg = (void *) tf->tf_regs.reg_rdx;
 		ept_gpa2hva(eptrt, gpa_pg, &hva_pg);
 
 		// The permissions for the sent page in %rsi
@@ -463,11 +463,23 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 
 		if (hva_pg == NULL) {
 			tf->tf_regs.reg_rax = -E_INVAL;
+			cprintf("vmexits::VMX_VMCALL_IPCSEND: hva_pg is NULL \n"); // debug statement
 			//panic("VMX_VMCALL_IPCSEND");
+			handled = true;
+			break;
 		}
 
-		r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t)hva_pg, perm, 0);
+		// TODO7: TA recommend sending the physical page instead?
+		r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) gpa_pg, perm, 0);
+		
+		//r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) hva_pg, perm, 0);
+		
 		tf->tf_regs.reg_rax = r;
+
+		// Note: FSREQ_READ = 3; FSREQ_WRITE = 4 (reference: inc/fs.h)
+		//cprintf("vmexits::VMX_VMCALL_IPCSEND: to_env: %d, val: %d, gpa_pg: %p, hva_pg: %p, perm: %x \n", to_env, val, gpa_pg, hva_pg, perm); // debug statement
+
+		//cprintf("vmexits::VMX_VMCALL_IPCSEND: SYS_ipc_try_send result: %d \n", r); // debug statement
 
 		handled = true;
 		break;
@@ -479,11 +491,15 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		/* Your code here */
 		
 		// The VMX_VMCALL_IPCRECV vmcall places its error code into %rax and the received value into %rsi. It expects the destination address for a received page in %rbx.
-		hva_pg = tf->tf_regs.reg_rbx;
+		hva_pg = (void *) tf->tf_regs.reg_rbx;
 
 		tf->tf_rip += vmcs_read32(VMCS_32BIT_VMEXIT_INSTRUCTION_LENGTH);
-		r = syscall(SYS_ipc_recv, hva_pg, 0, 0, 0, 0);
+		r = syscall(SYS_ipc_recv, (uint64_t) hva_pg, 0, 0, 0, 0);
+
+		// Seems like SYS_ipc_recv never returns!
 		tf->tf_regs.reg_rax = r;
+
+		cprintf("vmexits::VMX_VMCALL_IPCRECV: SYS_ipc_recv result: %d \n", r); // debug statement
 
 		// TODO7: Where is the value from?  Believe it sits with the VMM as the middleware between Host FS and Guest FS.  Verify it is curenv->env_ipc_value.
 		tf->tf_regs.reg_rsi = curenv->env_ipc_value;
