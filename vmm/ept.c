@@ -188,8 +188,27 @@ void free_guest_mem(epte_t* eptrt) {
 //
 // Return 0 on success, <0 on failure.
 //
+// ept_page_insert() uses ept_lookup_gpa to traverse the EPT and insert a page.
+// If there is already a page at the given guest physical address, be sure to 
+// decrement its reference count before overwriting the mapping.
+// You will find functions like epte_present() , epte_addr() , pa2page() to be helpful.
+// You will also need to update the reference counts of the PageInfo struct of the 
+// page you insert. There are more details about this in the comment above the function.
+
 int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
     /* Your code here */
+    int r;
+    epte_t *epte_out;
+    if ((r = ept_lookup_gpa(eptrt, gpa, 1, &epte_out)) < 0) {
+        return r;
+    }
+    if (epte_present(*epte_out)) {
+        page_decref(pa2page(epte_addr(*epte_out)));
+    }
+    physaddr_t hpa = page2pa(pp);
+    *epte_out = hpa|__EPTE_TYPE(EPTE_TYPE_WB)|__EPTE_IPAT|perm;
+    pp -> pp_ref += 1;
+    tlb_invalidate(eptrt, gpa);
     return 0;
 }
 
