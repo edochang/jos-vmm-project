@@ -197,6 +197,7 @@ int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
     physaddr_t hpa = page2pa(pp);
 
     if ((r = ept_lookup_gpa(eptrt, gpa, 1, &epte)) < 0) {
+        cprintf("Failed to find gpa (%p) in ept_lookup_gpa. \n", gpa);
         return r;
     }
     
