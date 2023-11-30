@@ -11,6 +11,8 @@
         "env.h": "c",
         "kclock.h": "c",
         "pmap.h": "c",
-        "console.h": "c"
+        "console.h": "c",
+        "cpu.h": "c",
+        "syscall.h": "c"
     }
 }
