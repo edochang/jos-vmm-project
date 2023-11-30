@@ -104,7 +104,10 @@ flush_block(void *addr)
 
 	/* FIXME DP: Should be lab 8 */
     /* Your code here */
-	host_write(blockno * BLKSECTS, (void*) addr, BLKSECTS);
+	// TODO7: Check if you should be panicking or adding a debug statement here.
+	int r;
+	if ((r = host_write(blockno * BLKSECTS, (void*) addr, BLKSECTS)) < 0)
+		panic("in flush_block, host_write: %e", r);
 
 #endif
 

@@ -191,7 +191,32 @@ void free_guest_mem(epte_t* eptrt) {
 int ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, int perm) {
     /* Your code here */
     
+    epte_t *epte;
+    int r;
+
+    physaddr_t hpa = page2pa(pp);
+
+    if ((r = ept_lookup_gpa(eptrt, gpa, 1, &epte)) < 0) {
+        return r;
+    }
     
+    if (epte_present(*epte)) {
+        // If the mapping already exists, then overwrite it and decrement the old page reference count
+	    //pa2page(epte_addr(*epte_out))->pp_ref -= 1;
+	    page_decref(pa2page(epte_addr(*epte)));  // Inspiration from free_ept_level()    
+
+        // Increment the reference count
+        pp->pp_ref++;
+        
+        *epte = hpa|__EPTE_TYPE(EPTE_TYPE_WB)|__EPTE_IPAT|perm;
+        // invalidate tlb entry for gpa, since we've changed the mapping
+		tlb_invalidate(eptrt, gpa);
+        return 0;
+    }
+    
+    // *epte is not present
+    pp->pp_ref++;
+    *epte = hpa|__EPTE_TYPE(EPTE_TYPE_WB)|__EPTE_IPAT|perm;
 
     return 0;
 }

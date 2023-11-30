@@ -314,19 +314,29 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
     struct Env *e;
     struct PageInfo *pp;
     pte_t *ppte;
-    if ((r = envid2env(envid, &e, 0)) < 0)
-        return r;
+    if ((r = envid2env(envid, &e, 0)) < 0) {
+        //cprintf("[%08x] errored on retrieving env!\n", envid); // debug statement
+		return r;
+	}
     if (!e->env_ipc_recving) {
-        /* cprintf("[%08x] not recieving!\n", e->env_id); */
+        //cprintf("[%08x] not recieving!\n", e->env_id);
         return -E_IPC_NOT_RECV;
     }
 
     /*  Hint: check if environment is ENV_TYPE_GUEST or not, and if the source or destination 
      *  is using normal page, use page_insert. Use ept_page_insert() wherever possible. */
     /* Your code here */
-#ifndef VMM_GUEST
-	if (e->env_type = ENV_TYPE_GUEST) {
 
+	// If the curenv type is GUEST and the destination va is below UTOP, it means that the guest is sending a message to the host and it should insert a page in the host's page table.
+	/*
+	if (curenv->env_type == ENV_TYPE_GUEST && e->env_ipc_dstva < (void *) UTOP) {
+		
+	}
+	*/
+
+#ifndef VMM_GUEST
+	// If the dest environment is GUEST and the source va is below UTOP, it means that the host is sending a message to the guest and it should insert a page in the EPT.
+	if (e->env_type == ENV_TYPE_GUEST) {
 		if (srcva < (void*) UTOP) {
 			pp = page_lookup(curenv->env_pml4e, srcva, &ppte);
         	if (pp == 0) {
@@ -334,18 +344,17 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 				return -E_INVAL;
         	}
 
-			ept_page_insert(epte_t* eptrt, struct PageInfo* pp, void* gpa, perm)
-
-			e->env_ipc_perm = perm;
-
-			// If the dest environment is GUEST, then the rsi register of the trapframe should be set with 'value'.
-			e->env_tf.tf_regs.reg_rsi = value;
+			if ((r = ept_page_insert(e->env_pml4e, pp, e->env_ipc_dstva, perm)) < 0) {
+				cprintf("[%08x] ept_page_insert %08x failed in sys_ipc_try_send\n", e->env_id, e->env_ipc_dstva);
+				return r;
+			}
 		} else {
 			e->env_ipc_perm = 0;
 		}
 	} 
 #endif
 
+	// TODO7: Check if we need additional VMM MACRO / preprocessor logic in the regular page insert here.  If the curenv type is GUEST and the destination va is below UTOP, it means that the guest is sending a message to the host and it should insert a page in the host's page table.
     if (srcva < (void*) UTOP && e->env_ipc_dstva < (void*) UTOP) {
         if ((~perm & (PTE_U|PTE_P)) || (perm & ~PTE_SYSCALL)) {
             cprintf("[%08x] bad perm %x in sys_ipc_try_send\n", curenv->env_id, perm);
@@ -374,6 +383,14 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
         e->env_ipc_perm = 0;
     }
 
+#ifndef VMM_GUEST
+	// Finally, at the end of this function, if the dest environment is GUEST, then the rsi register of the trapframe should be set with 'value'.
+	if (e->env_type == ENV_TYPE_GUEST) {
+		// If the dest environment is GUEST, then the rsi register of the trapframe should be set with 'value'.
+		e->env_tf.tf_regs.reg_rsi = value;
+	}
+#endif
+
     e->env_ipc_recving = 0;
     e->env_ipc_from = curenv->env_id;
     e->env_ipc_value = value;
@@ -399,6 +416,7 @@ sys_ipc_recv(void *dstva)
 	if (curenv->env_ipc_recving)
 		panic("already recving!");
 
+	// TODO7: Group to check if they agree with this change, though there's no code here instruction.  TA mentioned that we shouldn't need to add any code here, but yes the function is not returning an error.  Test to see if this is needed.
 	if (dstva < (void*) UTOP && dstva != ROUNDDOWN(dstva, PGSIZE)){
 		return -E_INVAL;
 	}
