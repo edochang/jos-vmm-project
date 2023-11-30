@@ -470,9 +470,9 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 		}
 
 		// TODO7: TA recommend sending the physical page instead?
-		r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) gpa_pg, perm, 0);
+		//r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) gpa_pg, perm, 0);
 		
-		//r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) hva_pg, perm, 0);
+		r = syscall(SYS_ipc_try_send, to_env, val, (uint64_t) hva_pg, perm, 0);
 		
 		tf->tf_regs.reg_rax = r;
 
@@ -501,8 +501,8 @@ handle_vmcall(struct Trapframe *tf, struct VmxGuestInfo *gInfo, uint64_t *eptrt)
 
 		cprintf("vmexits::VMX_VMCALL_IPCRECV: SYS_ipc_recv result: %d \n", r); // debug statement
 
-		// TODO7: Where is the value from?  Believe it sits with the VMM as the middleware between Host FS and Guest FS.  Verify it is curenv->env_ipc_value.
-		tf->tf_regs.reg_rsi = curenv->env_ipc_value;
+		// TODO7: Where is the value from?  Believe it sits with the VMM as the middleware between Host FS and Guest FS.  Verify it is curenv->env_ipc_value.  Note: Checked with TA that this is not needed and can be commented out.
+		//tf->tf_regs.reg_rsi = curenv->env_ipc_value;
 
 		handled = true;
 
